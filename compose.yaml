@@ -1,0 +1,82 @@
+name: roam-planner
+
+services:
+  trek:
+    image: roam-planner-web:local
+    build: .
+    ports:
+      - "127.0.0.1:${TREK_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-zh}
+      APP_URL: http://localhost:${TREK_PORT:-3000}
+      TREK_LOCAL_SINGLE_USER: "true"
+      AGENT_RUNTIME: pi-durable
+      AGENT_API_URL: http://agent:8102
+      EXTERNAL_SOURCES_URL: http://sources:8004
+      AMAP_API_KEY: ${AMAP_API_KEY:-}
+    volumes:
+      - trek_data:/app/data
+      - trek_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 12
+
+  agent:
+    image: roam-planner-agent:local
+    build: ./agent
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env.product}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      AGENT_PROVIDER: deepseek
+      AGENT_MODEL: ${AGENT_MODEL:-deepseek-flash}
+      AGENT_THINKING_LEVEL: ${AGENT_THINKING_LEVEL:-high}
+      TREK_MCP_URL: http://trek:3000/mcp
+      SOURCES_MCP_URL: http://sources:8004/mcp
+    volumes:
+      - agent_data:/data
+    depends_on:
+      trek:
+        condition: service_healthy
+      sources:
+        condition: service_healthy
+
+  sources:
+    image: roam-planner-sources:local
+    build: ./services/external-sources
+    environment:
+      SOURCES_STORE_PATH: /data/sources.sqlite
+      KNOWLEDGE_ARCHIVE_ROOT: /data/archive
+      SOURCES_GUIDES_ENABLED: "false"
+      AMAP_API_KEY: ${AMAP_API_KEY:-}
+      WEB_SEARCH_PROVIDERS: ${WEB_SEARCH_PROVIDERS:-exa}
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      SOURCES_ROUTES_PROVIDER: ${SOURCES_ROUTES_PROVIDER:-amap}
+      EXA_MCP_URL: ${EXA_MCP_URL:-https://mcp.exa.ai/mcp}
+      RAILWAY_MCP_URL: ${RAILWAY_MCP_URL:-}
+    volumes:
+      - sources_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/healthz',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 6
+
+  railway:
+    profiles: [railway]
+    image: drfccv/mcp-server-12306@sha256:99e0fa47faf2461226dff070b0cceb25c9d9b9181b9b1a49ed3e258b8351c6e2
+    platform: linux/amd64
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8000"
+
+volumes:
+  trek_data:
+  trek_uploads:
+  agent_data:
+  sources_data:

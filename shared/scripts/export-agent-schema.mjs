@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+import { agentPlanSchema } from '../dist/index.mjs';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const target = path.join(root, 'intelligence/src/travel_agent/schemas/travel-plan.schema.json');
+fs.mkdirSync(path.dirname(target), { recursive: true });
+fs.writeFileSync(target, JSON.stringify(z.toJSONSchema(agentPlanSchema, { unrepresentable: 'any', io: 'input' }), null, 2) + '\n');
+console.log('Exported canonical travel-plan JSON Schema');

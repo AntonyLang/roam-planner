@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/liketrek/TREK",
+  "version": "4.3.3",
+  "commit": "1c05ee4b3ac9523c41ccdd3baad989ba48a7409a",
+  "license": "AGPL-3.0",
+  "project_repository": "https://github.com/AntonyLang/roam-planner",
+  "derivative": "Roam Planner"
+}
