@@ -4,7 +4,7 @@
 
 Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话确认偏好与限制，把地点、时间、交通和费用放到同一张行程地图上。
 
-![行程地图与多轮规划助手](docs/media/planner-desktop.jpg)
+![地图行程序号、铁路示意与多轮规划助手](docs/media/numbered-railway.jpg)
 
 图中为演示行程；未订的交通与住宿保留待确认状态。
 
