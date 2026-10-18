@@ -20,24 +20,72 @@ Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话�
 
 ## 快速开始
 
-需要 Git、Docker 和 Docker Compose。使用 Docker Hub 预构建镜像，无需在电脑安装 Node.js、Python 或浏览器依赖。
+选择下面一种方式即可。两种方式都通过 Docker Compose 启动网页与旅程后端、规划 Agent、外部来源和铁路 MCP 四个服务，无需在电脑安装 Node.js、Python 或浏览器依赖。
+
+### 方式一：Docker Hub 预构建镜像（推荐）
+
+适合直接使用。只需 Docker Engine / Docker Desktop 和 Docker Compose，不需要 Git，也不需要下载完整源码。当前镜像版本为 `0.2.1`，发布平台为 Linux/amd64；Windows 使用 Docker Desktop 的 Linux 容器。
+
+新建一个部署目录，将 [compose.yaml](https://raw.githubusercontent.com/AntonyLang/roam-planner/main/compose.yaml) 下载到里面。
+
+Windows PowerShell：
+
+```powershell
+mkdir roam-planner
+cd roam-planner
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/AntonyLang/roam-planner/main/compose.yaml -OutFile compose.yaml
+```
+
+Linux / macOS 终端：
+
+```sh
+mkdir roam-planner
+cd roam-planner
+curl -fL https://raw.githubusercontent.com/AntonyLang/roam-planner/main/compose.yaml -o compose.yaml
+```
+
+在这个目录拉取镜像并启动：
+
+```sh
+docker compose pull
+docker compose up -d --wait --no-build
+docker compose ps
+```
+
+[`pull`](https://docs.docker.com/reference/cli/docker/compose/pull/) 下载 Compose 指定的镜像，[`up`](https://docs.docker.com/reference/cli/docker/compose/up/) 启动容器并等待就绪；`--no-build` 明确使用镜像，不在本机编译源码。首次启动无需创建 Key 文件。
+
+镜像：[网页与旅程](https://hub.docker.com/r/antonyaty/roam-planner) · [规划 Agent](https://hub.docker.com/r/antonyaty/roam-planner-agent) · [外部来源](https://hub.docker.com/r/antonyaty/roam-planner-sources)。铁路 MCP 随 Compose 启动，无需额外 Key。
+
+### 方式二：拉取仓库，从源码构建
+
+适合修改代码或自行构建镜像。需要 Git、Docker 和 Docker Compose：
 
 ```sh
 git clone https://github.com/AntonyLang/roam-planner.git
 cd roam-planner
-docker compose pull
+docker compose build
 docker compose up -d --wait --no-build
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，跟随首次引导配置服务，也可点“稍后配置，先使用”管理旅程和查看地图。启用规划助手时填写模型 Key、地址与模型名称并检查连接；地图与小红书也可稍后配置。新建旅行后，在行程页右侧与规划助手交流。当前部署采用本地单用户模式，默认端口仅绑定本机。
+编译和依赖安装在镜像构建过程中完成。源码构建所需的网络访问与自定义部署说明见[部署文档](docs/deployment.md)。
 
-镜像：[网页与旅程](https://hub.docker.com/r/antonyaty/roam-planner) · [规划 Agent](https://hub.docker.com/r/antonyaty/roam-planner-agent) · [外部来源](https://hub.docker.com/r/antonyaty/roam-planner-sources)。源码构建、端口与环境变量配置见[部署文档](docs/deployment.md)。
+### 首次打开与配置
 
-小红书是默认关闭的可选来源，不配置也能使用规划助手；平台可能限制部分容器网络，具体见[配置说明](docs/configuration.md#小红书)。
+1. 打开 [http://localhost:3000](http://localhost:3000)，进入首次服务引导。
+2. 填写模型服务地址、模型名称与 API Key，保存并检查连接；按需填写高德 Web 服务 Key。也可点“稍后配置，先使用”管理旅程和查看地图，依赖缺失配置的服务会提示补齐。
+3. 新建旅行，在行程页右侧与规划助手交流。日后可从首页或用户菜单进入“服务配置”修改。
+
+两种方式都采用本地单用户模式，默认端口仅绑定本机。小红书是默认关闭的可选来源，不配置也能使用规划助手；平台可能限制部分容器网络，具体见[配置说明](docs/configuration.md#小红书)。
 
 ![首次服务引导，可稍后配置](docs/media/service-setup.png)
 
 可以先试一句：**“想带爸妈去苏州玩两天，轻松一点，你先帮我看看。”** 后续再回答助手对日期、预算和步行能力的询问。
+
+### 更新与停止
+
+更新前等待当前规划结束并备份数据。Docker Hub 方式先下载新版 `compose.yaml`，再执行 `docker compose pull` 和启动命令；源码方式执行 `git pull --ff-only`、`docker compose build` 和启动命令。若使用本地版本或端口配置，更新时保持一致，详见[部署、数据与更新](docs/deployment.md)。
+
+停止服务可运行 `docker compose stop`，恢复时重新执行启动命令。旅程、服务配置与会话保存在 Docker 数据卷中；不要使用 `docker compose down -v`，它会删除这些数据。
 
 ## 文档
 
