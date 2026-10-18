@@ -772,6 +772,44 @@ describe('MapViewGL', () => {
     })
   })
 
+  it('recentres the same selected place on a new sidebar focus request without refitting the day', async () => {
+    const places = [buildMapPlace({ id: 8, lat: 48, lng: 2 })]
+    const { rerender } = render(<MapViewGL places={places} selectedPlaceId={8} placeFocusKey={1} />)
+    await act(async () => {})
+    glMap.flyTo.mockClear()
+    glMap.fitBounds.mockClear()
+    rerender(<MapViewGL places={places} selectedPlaceId={8} placeFocusKey={2} />)
+    await act(async () => {})
+    expect(glMap.flyTo).toHaveBeenCalledWith(expect.objectContaining({ center: [2, 48], zoom: 14 }))
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+    glMap.flyTo.mockClear()
+    rerender(<MapViewGL places={places} selectedPlaceId={8} placeFocusKey={2} hasInspector />)
+    await act(async () => {})
+    expect(glMap.flyTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps a selected stop centred when a pending day route arrives afterwards', async () => {
+    const places = [buildMapPlace({ id: 8, lat: 48, lng: 2 })]
+    const route: [number, number][][] = [[[48, 2], [48.1, 2.1]]]
+    const later: [number, number][][] = [[[48, 2], [49, 3], [48.1, 2.1]]]
+    const { rerender } = render(<MapViewGL places={places} dayPlaces={places} route={route} fitKey={1} />)
+    await act(async () => {})
+    rerender(<MapViewGL places={places} dayPlaces={places} route={route} fitKey={2} />)
+    await act(async () => {})
+    rerender(<MapViewGL places={places} dayPlaces={places} route={route} fitKey={2} selectedPlaceId={8} />)
+    await act(async () => {})
+    glMap.fitBounds.mockClear()
+    rerender(<MapViewGL places={places} dayPlaces={places} route={later} fitKey={2} selectedPlaceId={8} />)
+    await act(async () => {})
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+    rerender(<MapViewGL places={places} dayPlaces={places} route={later} fitKey={2} />)
+    await act(async () => {})
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+    rerender(<MapViewGL places={places} dayPlaces={places} route={later} fitKey={3} />)
+    await act(async () => {})
+    expect(glMap.fitBounds).toHaveBeenCalled()
+  })
+
   it('FE-COMP-MAPVIEWGL-016: leaves the camera alone when a route appears long after the fit', async () => {
     const dayPlaces = [
       buildMapPlace({ id: 1, lat: 35.38, lng: 136.94 }),

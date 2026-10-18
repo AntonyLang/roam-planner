@@ -2086,7 +2086,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                         }
                         const moveUp = (e) => { e.stopPropagation(); arrowMove('up') }
                         const moveDown = (e) => { e.stopPropagation(); arrowMove('down') }
-                        const selectPlace = () => { onPlaceClick(isPlaceSelected ? null : place.id, isPlaceSelected ? null : assignment.id); if (!isPlaceSelected) onSelectDay(day.id, true) }
+                        const selectPlace = () => {
+                          onSelectDay(day.id, true)
+                          onPlaceClick(place.id, assignment.id)
+                        }
 
                         return (
                           <React.Fragment key={`place-${assignment.id}`}>

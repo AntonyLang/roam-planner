@@ -844,7 +844,7 @@ describe('PlaceInspector', () => {
 
   it('FE-PLANNER-INSPECTOR-048: description/notes do not shrink so the card scrolls instead of clipping', () => {
     const longText = 'Lorem ipsum dolor sit amet. '.repeat(200);
-    const p = buildPlace({ id: 202, description: longText, notes: longText } as any);
+    const p = buildPlace({ id: 202, description: longText, notes: `Other notes: ${longText}` } as any);
     const { container } = render(<PlaceInspector {...defaultProps} place={p} />);
     const notes = Array.from(container.querySelectorAll('.collab-note-md')) as HTMLElement[];
     // Both description and notes containers must keep their natural height
@@ -1432,6 +1432,22 @@ describe('PlaceInspector', () => {
   });
 
   // ── Day-specific assignment note (#2163) ─────────────────────────────────────
+
+  it('shows repeated description/place/day notes once under the day label and preserves distinct notes', () => {
+    const p = buildPlace({ id: 1, description: 'Leave at 08:35', notes: 'Leave at 08:35' });
+    const assignment = { id: 99, place: p, day_id: 1, place_id: 1, order_index: 0, notes: '  Leave at 08:35\n' };
+    const { rerender } = render(<PlaceInspector {...defaultProps} place={p} selectedDayId={1} selectedAssignmentId={99} assignments={{ '1': [assignment] }} />);
+    const scroll = screen.getByTestId('inspector-scroll');
+    expect(within(scroll).getAllByText('Leave at 08:35')).toHaveLength(1);
+    expect(within(scroll).getByText('Notes for this day')).toBeTruthy();
+    rerender(<PlaceInspector {...defaultProps} place={{ ...p, description: 'Old street', notes: 'Bring water' }} selectedDayId={1} selectedAssignmentId={99} assignments={{ '1': [assignment] }} />);
+    expect(within(scroll).getByText('Old street')).toBeTruthy();
+    expect(within(scroll).getByText('Bring water')).toBeTruthy();
+    expect(within(scroll).getByText('Leave at 08:35')).toBeTruthy();
+    rerender(<PlaceInspector {...defaultProps} place={p} />);
+    expect(within(scroll).getAllByText('Leave at 08:35')).toHaveLength(1);
+    expect(within(scroll).queryByText('Notes for this day')).toBeNull();
+  });
 
   it('FE-PLANNER-INSPECTOR-099: the assignment note renders as markdown under its own eyebrow', () => {
     const assignmentInDay = [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: 'Book the **10:00** timed entry' }];

@@ -369,6 +369,8 @@ export default function MMapArea({ planner, shell, agentDraft }: MMapAreaProps) 
         selectedDayId={planner.selectedDayId}
         routeSegments={onStage ? undefined : planner.overviewActive ? planner.tripOverview.segments : planner.routeSegments}
         selectedPlaceId={planner.selectedPlaceId}
+        selectedPlace={planner.selectedPlace}
+        placeFocusKey={planner.placeFocusKey}
         onMarkerClick={onStage ? openStagePin : planner.handleMarkerClick}
         // Tap on empty map = deselect, same contract as desktop.
         onMapClick={planner.handleMapClick}

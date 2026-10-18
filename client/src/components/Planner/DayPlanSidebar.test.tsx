@@ -469,6 +469,20 @@ describe('DayPlanSidebar', () => {
     expect(screen.getByText('Louvre Museum')).toBeInTheDocument()
   })
 
+  it('requests the day before focusing a stop, including another click on the selected stop', async () => {
+    const user = userEvent.setup()
+    const place = buildPlace({ id: 42, name: 'Louvre Museum' })
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const assignment = buildAssignment({ id: 99, day_id: 10, order_index: 0, place })
+    const calls: unknown[][] = []
+    const onSelectDay = (...args: unknown[]) => { calls.push(['day', ...args]) }
+    const onPlaceClick = (...args: unknown[]) => { calls.push(['place', ...args]) }
+    render(<DayPlanSidebar {...makeDefaultProps({ days: [day], places: [place], assignments: { '10': [assignment] }, selectedDayId: 10, selectedPlaceId: 42, selectedAssignmentId: 99, onSelectDay, onPlaceClick })} />)
+    await user.click(screen.getByText('Louvre Museum'))
+    await user.click(screen.getByText('Louvre Museum'))
+    expect(calls).toEqual([['day', 10, true], ['place', 42, 99], ['day', 10, true], ['place', 42, 99]])
+  })
+
   // ── Transit search button (#1065 — replaced the rename pencil; renaming
   //    moved next to the day name in the day detail panel) ─────────────────
 

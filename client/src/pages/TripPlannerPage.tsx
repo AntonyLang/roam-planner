@@ -271,7 +271,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
     leftWidth, rightWidth,
     leftHidden, rightHidden, toggleLeft, toggleRight, narrowPanels,
     startResizeLeft, startResizeRight,
-    selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment,
+    selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment, placeFocusKey,
     showDayDetail, setShowDayDetail, dayDetailCollapsed, setDayDetailCollapsed,
     showPlaceForm, setShowPlaceForm, editingPlace, setEditingPlace, setPlaceFormDayId,
     prefillCoords, setPrefillCoords, editingAssignmentId, setEditingAssignmentId,
@@ -444,6 +444,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               selectedDayId={selectedDayId}
               routeSegments={roadtripActive ? roadtripRoutes.segments : overviewActive ? tripOverview.segments : routeSegments}
               selectedPlaceId={selectedPlaceId}
+              placeFocusKey={placeFocusKey}
               selectedPlace={selectedPlace}
               onMarkerClick={handleMarkerClick}
               onMapClick={handleMapClick}

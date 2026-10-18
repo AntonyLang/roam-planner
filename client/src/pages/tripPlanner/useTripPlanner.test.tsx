@@ -726,6 +726,36 @@ describe('useTripPlanner — map derivations', () => {
     expect(result.current.mapPlaces.map(p => p.id)).toEqual([1])
   })
 
+  it('scopes default map pins by day, including shared visits, and restores all pins in overview', async () => {
+    const first=geo(1), second=geo(2,{lat:first.lat,lng:first.lng}), shared=geo(3), unplanned=geo(4)
+    seedTrip({places:[first,second,shared,unplanned],selectedDayId:7,
+      assignments:{'7':[buildAssignment({id:10,day_id:7,place:first}),buildAssignment({id:11,day_id:7,place:shared})],
+        '8':[buildAssignment({id:12,day_id:8,place:second}),buildAssignment({id:13,day_id:8,place:shared})]}})
+    const {result}=await renderPlanner()
+    expect(result.current.mapPlaces.map(p=>p.id)).toEqual([1,3])
+    act(()=>useTripStore.setState({selectedDayId:8}))
+    expect(result.current.mapPlaces.map(p=>p.id)).toEqual([2,3])
+    act(()=>result.current.setExpandedDayIds(new Set()))
+    expect(result.current.mapPlaces.map(p=>p.id)).toEqual([2,3])
+    act(()=>useTripStore.setState({selectedDayId:9}))
+    expect(result.current.mapPlaces).toEqual([])
+    act(()=>{result.current.setExpandedDayIds(null);useTripStore.setState({selectedDayId:null})})
+    expect(result.current.mapPlaces.map(p=>p.id)).toEqual([1,2,3,4])
+  })
+
+  it('keeps the selected day hotel and booking pins while excluding other day related places', async () => {
+    vi.mocked(accommodationRepo.list).mockResolvedValue({accommodations:[
+      {id:1,trip_id:42,place_id:3,start_day_id:7,end_day_id:9},
+      {id:2,trip_id:42,place_id:4,start_day_id:9,end_day_id:9},
+    ]} as never)
+    seedTrip({places:[geo(1),geo(2),geo(3),geo(4),geo(5),geo(6)],selectedDayId:8,
+      days:[buildDay({id:7,day_number:1}),buildDay({id:8,day_number:2}),buildDay({id:9,day_number:3})],
+      assignments:{'7':[buildAssignment({id:10,day_id:7,place:geo(1)})],'8':[buildAssignment({id:11,day_id:8,place:geo(2)})]},
+      reservations:[buildReservation({id:20,place_id:5,day_id:8}),buildReservation({id:21,place_id:6,day_id:7})]})
+    const {result}=await renderPlanner()
+    await waitFor(()=>expect(result.current.mapPlaces.map(p=>p.id)).toEqual([2,3,5]))
+  })
+
   it('FE-TP-HOOK-031: the selected day drives the marker order map and the fit list', async () => {
     const a = geo(1)
     const b = geo(2)
@@ -898,6 +928,48 @@ describe('useTripPlanner — connection visibility', () => {
 })
 
 describe('useTripPlanner — selection handlers', () => {
+  it('restores all pins in overview and exits overview when a day is selected', async () => {
+    const first = buildPlace({ id: 1, lat: 1, lng: 2 })
+    const second = buildPlace({ id: 2, lat: 3, lng: 4 })
+    actions.setSelectedDay.mockImplementation(dayId => useTripStore.setState({ selectedDayId: dayId as number | null }))
+    seedTrip({ places: [first, second], selectedDayId: 7, assignments: {
+      '7': [buildAssignment({ id: 10, day_id: 7, place: first })],
+      '8': [buildAssignment({ id: 11, day_id: 8, place: second })],
+    } })
+    const { result } = await renderPlanner()
+    act(() => result.current.handlePlaceClick(1, 10))
+    act(() => result.current.toggleOverview())
+    expect(result.current.overviewActive).toBe(true)
+    expect(useTripStore.getState().selectedDayId).toBeNull()
+    expect(result.current.selectedPlaceId).toBeNull()
+    expect(result.current.mapPlaces.map(p => p.id)).toEqual([1, 2])
+    act(() => result.current.handleSelectDay(8))
+    expect(result.current.overviewActive).toBe(false)
+    expect(result.current.mapPlaces.map(p => p.id)).toEqual([2])
+    expect(sessionStorage.getItem('trip-overview-42')).toBe('0')
+  })
+
+  it('retains a sidebar selection after switching its day and repeats the focus request', async () => {
+    const place = buildPlace({ id: 1, lat: 1, lng: 2 })
+    seedTrip({ places: [place] })
+    const { result } = await renderPlanner()
+    const before = result.current.placeFocusKey
+    act(() => {
+      result.current.handleSelectDay(7, true)
+      result.current.handlePlaceClick(1, 10)
+    })
+    expect(result.current.selectedPlaceId).toBe(1)
+    expect(result.current.selectedAssignmentId).toBe(10)
+    expect(result.current.placeFocusKey).toBe(before + 1)
+    act(() => {
+      result.current.handleSelectDay(7, true)
+      result.current.handlePlaceClick(1, 10)
+    })
+    expect(result.current.selectedPlaceId).toBe(1)
+    expect(result.current.selectedAssignmentId).toBe(10)
+    expect(result.current.placeFocusKey).toBe(before + 2)
+  })
+
   it('FE-TP-HOOK-038: clicking a planned stop selects its assignment and reopens both panels', async () => {
     const place = buildPlace({ id: 1, lat: 1, lng: 2 })
     seedTrip({ places: [place] })
@@ -991,6 +1063,27 @@ describe('useTripPlanner — selection handlers', () => {
     act(() => { result.current.handleMapClick() })
 
     expect(result.current.selectedPlaceId).toBeNull()
+  })
+
+  it('cycles shared marker visits only within the selected day and clears focus on a day switch', async () => {
+    const place=buildPlace({id:1,lat:1,lng:2})
+    actions.setSelectedDay.mockImplementation(dayId=>useTripStore.setState({selectedDayId:dayId as number|null}))
+    seedTrip({places:[place],selectedDayId:8,assignments:{
+      '7':[buildAssignment({id:10,day_id:7,place})],
+      '8':[buildAssignment({id:12,day_id:8,place,order_index:1}),buildAssignment({id:11,day_id:8,place,order_index:0})],
+    }})
+    const {result}=await renderPlanner()
+    act(()=>result.current.handleMarkerClick(1))
+    expect(result.current.selectedAssignmentId).toBe(11)
+    act(()=>result.current.handleMarkerClick(1))
+    expect(result.current.selectedAssignmentId).toBe(12)
+    act(()=>result.current.handleMarkerClick(1))
+    expect(result.current.selectedPlaceId).toBeNull()
+    act(()=>result.current.handleMarkerClick(1))
+    act(()=>result.current.handleSelectDay(7))
+    expect(result.current.selectedPlaceId).toBeNull()
+    expect(result.current.selectedAssignmentId).toBeNull()
+    expect(useTripStore.getState().selectedDayId).toBe(7)
   })
 
   it('FE-TP-HOOK-045: selecting a day resets the mobile drawer and recomputes the route', async () => {

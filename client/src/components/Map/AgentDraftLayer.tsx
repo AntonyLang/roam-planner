@@ -15,7 +15,7 @@ function stopIcon(point: DraftMap['points'][number], focused: boolean) {
   })
 }
 
-export function AgentDraftLayer({ draft }: { draft?: DraftMap }) {
+export function AgentDraftLayer({ draft, holdViewport = false }: { draft?: DraftMap; holdViewport?: boolean }) {
   const map = useMap()
   const fitted = useRef<string|undefined>(undefined)
   const markers = useRef<Record<string,any>>({})
@@ -29,8 +29,11 @@ export function AgentDraftLayer({ draft }: { draft?: DraftMap }) {
       ...(draft?.formalLines ?? []).flatMap(line=>line.map(([lng,lat])=>[lat,lng] as [number,number]))]
     if (!bounds.length) { fitted.current = undefined; return }
     const viewKey=draft?.viewKey??'default'
-    if (fitted.current!==viewKey) { map.fitBounds(bounds, { paddingTopLeft: [(draft?.padding?.left ?? 0)+45, 80], paddingBottomRight: [(draft?.padding?.right ?? 0)+45, 45], maxZoom: 14 }); fitted.current = viewKey }
-  }, [map, draft?.version, draft?.viewKey])
+    if (fitted.current!==viewKey) {
+      fitted.current = viewKey
+      if (!holdViewport) map.fitBounds(bounds, { paddingTopLeft: [(draft?.padding?.left ?? 0)+45, 80], paddingBottomRight: [(draft?.padding?.right ?? 0)+45, 45], maxZoom: 14 })
+    }
+  }, [map, draft?.version, draft?.viewKey, holdViewport])
   useEffect(() => {
     const selected = draft?.points.find(p => p.ref === draft.focus)
     if (selected) { map.flyTo([selected.lat, selected.lng], 15); markers.current[selected.ref]?.openPopup() }
@@ -43,7 +46,7 @@ export function AgentDraftLayer({ draft }: { draft?: DraftMap }) {
   </>
 }
 
-export function useAgentDraftGL(map: any, ready: boolean, draft?: DraftMap, popupFactory?:()=>any) {
+export function useAgentDraftGL(map: any, ready: boolean, draft?: DraftMap, popupFactory?:()=>any, holdViewport = false) {
   const fitted = useRef<string|undefined>(undefined)
   useEffect(() => {
     if (!map || !ready) return
@@ -85,12 +88,15 @@ export function useAgentDraftGL(map: any, ready: boolean, draft?: DraftMap, popu
     const bounds = [...(draft?.points ?? []).map(p=>[p.lng,p.lat]),...(draft?.formalLines ?? []).flat()]
     const viewKey=draft?.viewKey??'default'
     if (bounds.length && fitted.current!==viewKey) {
-      const xs = bounds.map(p=>p[0]), ys = bounds.map(p=>p[1])
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: { left: (draft.padding?.left ?? 0)+45, right: (draft.padding?.right ?? 0)+45, top: 80, bottom: 45 }, maxZoom: 14 }); fitted.current = viewKey
+      fitted.current = viewKey
+      if (!holdViewport) {
+        const xs = bounds.map(p=>p[0]), ys = bounds.map(p=>p[1])
+        map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: { left: (draft.padding?.left ?? 0)+45, right: (draft.padding?.right ?? 0)+45, top: 80, bottom: 45 }, maxZoom: 14 })
+      }
     }
     if (!bounds.length) fitted.current = undefined
     return () => { map.off('styledata', apply) }
-  }, [map, ready, draft])
+  }, [map, ready, draft, holdViewport])
   useEffect(() => {
     const p = draft?.points.find(p => p.ref === draft.focus)
     if (map && ready && p) map.flyTo({ center: [p.lng, p.lat], zoom: 15 })

@@ -306,6 +306,7 @@ export function useTripPlanner() {
     startResizeLeft, startResizeRight,
   } = useResizablePanels()
   const { selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment } = usePlaceSelection()
+  const [placeFocusKey, setPlaceFocusKey] = useState(0)
   const [dayDetail, setShowDayDetail] = useState<Day | null>(null)
   // A day deleted while its panel is open, here or by a fellow traveller, takes
   // the panel along instead of leaving it on a day that is gone.
@@ -481,13 +482,6 @@ export function useTripPlanner() {
   // colour. Per trip and per session like road trip mode — it answers "what does the
   // whole thing look like", which is a question you ask of one trip, not a preference.
   const [overviewShown, setOverviewShown] = useState<boolean>(() => sessionStorage.getItem(`trip-overview-${tripId}`) === '1')
-  const toggleOverview = useCallback(() => {
-    setOverviewShown(prev => {
-      const next = !prev
-      sessionStorage.setItem(`trip-overview-${tripId}`, next ? '1' : '0')
-      return next
-    })
-  }, [tripId])
   // The recorded route from Dawarich (#2279), per trip and per session for the
   // same reason as the overview above: it answers "what actually happened on
   // this trip", which is a question about one trip rather than a preference.
@@ -652,6 +646,11 @@ export function useTripPlanner() {
   const [expandedDayIds, setExpandedDayIds] = useState<Set<number> | null>(null)
 
   const mapPlaces = useMemo(() => {
+    // A selected day scopes itinerary pins just like its routes. The road-trip
+    // surface owns a separate whole-trip/card scope below.
+    const dayPlaceIds = selectedDayId != null && !roadtripMode
+      ? plannedPlaceIdsForDay(selectedDayId, days, { assignments, accommodations: tripAccommodations, reservations })
+      : null
     // Build set of place IDs assigned to collapsed days
     const hiddenPlaceIds = new Set<number>()
     if (expandedDayIds) {
@@ -672,34 +671,31 @@ export function useTripPlanner() {
       }
     }
 
-    // Planned place IDs — needed by both the 'unplanned' filter (exclude them) and
-    // the new 'planned' filter (keep only them). With a day selected, 'planned'
-    // follows it like the other filters do; with no day selected it keeps showing
-    // the whole plan (#2024). 'unplanned' always uses the whole-trip set — a place
-    // assigned to any day is not unplanned.
+    // Explicit place/category filters can narrow this scope further. Unplanned
+    // still means unplanned anywhere in the trip.
     const plannedIds = placesFilter === 'unplanned' || placesFilter === 'planned'
-      ? (placesFilter === 'planned' && selectedDayId
-        ? plannedPlaceIdsForDay(selectedDayId, days, { assignments, accommodations: tripAccommodations, reservations })
+      ? (placesFilter === 'planned' && dayPlaceIds
+        ? dayPlaceIds
         : plannedPlaceIds({ assignments, accommodations: tripAccommodations, reservations }))
       : null
 
     return places.filter(p => {
       if (!p.lat || !p.lng) return false
+      if (dayPlaceIds && !dayPlaceIds.has(p.id)) return false
       if (placesFilter === 'tracks' && !p.route_geometry) return false
       if (placesCategoryFilter.size > 0) {
         if (p.category_id == null) {
           if (!placesCategoryFilter.has('uncategorized')) return false
         } else if (!placesCategoryFilter.has(String(p.category_id))) return false
       }
-      // Collapsed-day declutter hides a day's stops on every filter EXCEPT 'planned':
-      // there the user asked to see the whole plan on the map, so a collapsed day
-      // must not drop its planned places.
-      if (placesFilter !== 'planned' && hiddenPlaceIds.has(p.id)) return false
+      // A focused day stays visible even if its sidebar card is folded.
+      // In overview, keep the existing collapsed-card and planned-filter behavior.
+      if (!dayPlaceIds && placesFilter !== 'planned' && hiddenPlaceIds.has(p.id)) return false
       if (placesFilter === 'unplanned' && plannedIds && plannedIds.has(p.id)) return false
       if (placesFilter === 'planned' && plannedIds && !plannedIds.has(p.id)) return false
       return true
     })
-  }, [places, placesCategoryFilter, placesFilter, assignments, expandedDayIds, selectedDayId, days, tripAccommodations, reservations])
+  }, [places, placesCategoryFilter, placesFilter, assignments, expandedDayIds, selectedDayId, days, tripAccommodations, reservations, roadtripMode])
 
   const { route, routeSegments, routeVias, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments } as any, selectedDayId, routeShown, routeProfile, tripAccommodations)
   // Road trip mode already draws the whole trip its own way, so the overview stands
@@ -791,11 +787,26 @@ export function useTripPlanner() {
   }, [roadtripVias.byDay])
 
   const handleSelectDay = useCallback((dayId: number | null, skipFit?: boolean) => {
+    setSelectedPlaceId(null)
+    if (dayId != null) {
+      setOverviewShown(false)
+      sessionStorage.setItem(`trip-overview-${tripId}`, '0')
+    }
     tripActions.setSelectedDay(dayId)
     if (!skipFit) setFitKey(k => k + 1)
     setMobileSidebarOpen(null)
     updateRouteForDay(dayId)
-  }, [updateRouteForDay])
+  }, [updateRouteForDay, setSelectedPlaceId, tripId])
+
+  const toggleOverview = useCallback(() => {
+    const next = !overviewShown
+    setOverviewShown(next)
+    sessionStorage.setItem(`trip-overview-${tripId}`, next ? '1' : '0')
+    if (next) {
+      handleSelectDay(null)
+      setShowDayDetail(null)
+    }
+  }, [overviewShown, tripId, handleSelectDay])
 
   const handlePlaceClick = useCallback((placeId: number | null, assignmentId?: number | null) => {
     if (assignmentId) {
@@ -803,7 +814,10 @@ export function useTripPlanner() {
     } else {
       setSelectedPlaceId(placeId)
     }
-    if (placeId) { setShowDayDetail(null); setLeftCollapsed(false); setRightCollapsed(false) }
+    if (placeId) {
+      setPlaceFocusKey(k => k + 1)
+      setShowDayDetail(null); setLeftCollapsed(false); setRightCollapsed(false)
+    }
   }, [selectAssignment, setSelectedPlaceId])
 
   const handleMarkerClick = useCallback((placeId?: number) => {
@@ -811,11 +825,12 @@ export function useTripPlanner() {
       setSelectedPlaceId(null)
       return
     }
-    // Find every assignment for this place (same place can sit on several
-    // days / be planned twice in one day). Cycle through them on repeated
-    // marker clicks so the sidebar highlight jumps to the next occurrence
-    // instead of leaving the user confused.
-    const allAssignments = Object.values(useTripStore.getState().assignments || {}).flat()
+    // Within a day, repeat clicks cycle only through that day's visits.
+    // Overview and road-trip mode retain the whole-trip cycle.
+    const current = useTripStore.getState()
+    const allAssignments = current.selectedDayId != null && !roadtripMode
+      ? [...(current.assignments[String(current.selectedDayId)] || [])].sort((a,b) => a.order_index-b.order_index)
+      : Object.values(current.assignments || {}).flat()
     const matching = allAssignments.filter(a => a?.place?.id === placeId)
 
     if (matching.length === 0) {
@@ -839,7 +854,7 @@ export function useTripPlanner() {
       }
     }
     setLeftCollapsed(false); setRightCollapsed(false)
-  }, [selectAssignment, selectedAssignmentId, selectedPlaceId, setSelectedPlaceId])
+  }, [selectAssignment, selectedAssignmentId, selectedPlaceId, setSelectedPlaceId, roadtripMode])
 
   const handleMapClick = useCallback(() => {
     setSelectedPlaceId(null)
@@ -2830,7 +2845,7 @@ export function useTripPlanner() {
     leftWidth, rightWidth, leftCollapsed, rightCollapsed, setLeftCollapsed, setRightCollapsed,
     leftHidden, rightHidden, toggleLeft, toggleRight, narrowPanels,
     startResizeLeft, startResizeRight,
-    selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment,
+    selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment, placeFocusKey,
     showDayDetail, setShowDayDetail, dayDetailCollapsed, setDayDetailCollapsed,
     showPlaceForm, setShowPlaceForm, editingPlace, setEditingPlace,
     prefillCoords, setPrefillCoords, editingAssignmentId, setEditingAssignmentId,

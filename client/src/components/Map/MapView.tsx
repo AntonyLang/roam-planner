@@ -330,17 +330,19 @@ function ViewportController({ onViewportChange }: { onViewportChange?: (b: { sou
 interface SelectionControllerProps {
   places: Place[]
   selectedPlaceId: number | null
+  placeFocusKey: number
   dayPlaces: Place[]
   selectedPlace: Place | null
   paddingOpts: L.FitBoundsOptions
 }
 
-function SelectionController({ places, selectedPlaceId, dayPlaces, selectedPlace, paddingOpts }: SelectionControllerProps) {
+function SelectionController({ places, selectedPlaceId, placeFocusKey, dayPlaces, selectedPlace, paddingOpts }: SelectionControllerProps) {
   const map = useMap()
   const prev = useRef(null)
+  const prevFocusKey = useRef(placeFocusKey)
 
   useEffect(() => {
-    if (selectedPlaceId && selectedPlaceId !== prev.current) {
+    if (selectedPlaceId && (selectedPlaceId !== prev.current || placeFocusKey !== prevFocusKey.current)) {
       // Bring a selected place to a readable zoom, matching the GL renderer.
       // Keep a closer user zoom. Offset the centre by the
       // side-panel + bottom-inspector padding so the pin lands in the middle of the
@@ -365,7 +367,8 @@ function SelectionController({ places, selectedPlaceId, dayPlaces, selectedPlace
       }
     }
     prev.current = selectedPlaceId
-  }, [selectedPlaceId, places, dayPlaces, selectedPlace, map])
+    prevFocusKey.current = placeFocusKey
+  }, [selectedPlaceId, placeFocusKey, places, dayPlaces, selectedPlace, map])
 
   return null
 }
@@ -396,6 +399,7 @@ function MapController({ center, zoom }: MapControllerProps) {
 interface BoundsControllerProps {
   places: Place[]
   routeCoords: [number, number][]
+  selectedPlaceId: number | null
   fitKey: number
   paddingOpts: L.FitBoundsOptions
   /** The map was built already framed on these places, so the opening fit has nothing to do. */
@@ -428,7 +432,7 @@ function leafletPadding(box: ViewportPadding): L.FitBoundsOptions {
   }
 }
 
-function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMount = false, focusPoints, fitPadding }: BoundsControllerProps) {
+function BoundsController({ places, routeCoords, selectedPlaceId, fitKey, paddingOpts, framedOnMount = false, focusPoints, fitPadding }: BoundsControllerProps) {
   const map = useMap()
   const prevFitKey = useRef(-1)
   const awaitingRoute = useRef(false)
@@ -464,6 +468,7 @@ function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMo
     if (fitKey === prevFitKey.current) return
     prevFitKey.current = fitKey
     awaitingRoute.current = false
+    if (selectedPlaceId != null) return
     if (places.length === 0) return
     // The map opened framed on these very places — re-fitting would only re-do that, and its
     // maxZoom would overrule the gentler zoom a single place opens at. Later fits (picking a
@@ -480,10 +485,12 @@ function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMo
   // Once the just-selected day's route is ready, expand the fit to include it.
   // One-shot per day-fit, so later route-profile toggles don't re-zoom the map.
   useEffect(() => {
+    // A sidebar/marker selection is newer than the pending day-route fit.
+    if (selectedPlaceId != null) { awaitingRoute.current = false; return }
     if (!awaitingRoute.current || routeCoords.length === 0) return
     awaitingRoute.current = false
     fitTo([...places.map(p => [p.lat, p.lng] as [number, number]), ...routeCoords])
-  }, [routeCoords]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routeCoords, selectedPlaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The caller's padding as a value, so a parent that builds the object inline on every
   // render does not move the camera each time it renders.
@@ -715,6 +722,7 @@ export const MapView = memo(function MapView({
   routeColors = null,
   routeSegments = [],
   selectedPlaceId = null,
+  placeFocusKey = 0,
   // The selected place itself, for when no pin on this map stands for it.
   selectedPlace = null,
   hoverDisabled = false,
@@ -985,7 +993,7 @@ export const MapView = memo(function MapView({
     // on the first pass. A second attempt one frame later does.
     if (typeof requestAnimationFrame === 'function') frame = requestAnimationFrame(reveal)
     return () => { if (frame !== null) cancelAnimationFrame(frame) }
-  }, [selectedPlaceId, places])
+  }, [selectedPlaceId, placeFocusKey, places])
 
   const markers = useMemo(() => places.map((place) => {
     const isSelected = place.id === selectedPlaceId
@@ -1168,8 +1176,8 @@ export const MapView = memo(function MapView({
       )}
 
       <MapController center={center} zoom={zoom} />
-      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} routeCoords={dayPlaces.length > 0 ? routeCoords : []} fitKey={fitKey} paddingOpts={paddingOpts} framedOnMount={initialView.framed} focusPoints={focusPoints} fitPadding={fitPadding} />
-      <SelectionController places={places} selectedPlaceId={selectedPlaceId} dayPlaces={dayPlaces} selectedPlace={selectedPlace} paddingOpts={paddingOpts} />
+      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} routeCoords={dayPlaces.length > 0 ? routeCoords : []} selectedPlaceId={selectedPlaceId} fitKey={fitKey} paddingOpts={paddingOpts} framedOnMount={initialView.framed} focusPoints={focusPoints} fitPadding={fitPadding} />
+      <SelectionController places={places} selectedPlaceId={selectedPlaceId} placeFocusKey={placeFocusKey} dayPlaces={dayPlaces} selectedPlace={selectedPlace} paddingOpts={paddingOpts} />
       <MapClickHandler onClick={onMapClick} />
       <MapContextMenuHandler onContextMenu={onMapContextMenu} />
       <CameraHoverGuard movingRef={mapMovingRef} onMoveStart={clearHover} onZoom={setMapZoom} />
@@ -1316,7 +1324,7 @@ export const MapView = memo(function MapView({
       ))}
       <PluginMapMarkers tripId={tripId} />
       <PluginMapLayers tripId={tripId} />
-      <AgentDraftLayer draft={agentDraft} />
+      <AgentDraftLayer draft={agentDraft} holdViewport={selectedPlaceId != null} />
     </MapContainer>
     {isMobile && <LocationButton
       mode={trackingMode}

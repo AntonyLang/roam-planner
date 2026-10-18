@@ -151,6 +151,8 @@ interface Props {
   routeColors?: ({ line: string; casing: string } | undefined)[] | null
   routeSegments?: RouteSegment[]
   selectedPlaceId?: number | null
+  /** A new sidebar request recentres even when the selected place is unchanged. */
+  placeFocusKey?: number
   /** The selected place itself, for when no pin on this map stands for it. */
   selectedPlace?: Place | null
   onMarkerClick?: (id: number) => void
@@ -683,6 +685,7 @@ export function MapViewGL({
   routeColors = null,
   routeSegments = NO_ROUTE_SEGMENTS,
   selectedPlaceId = null,
+  placeFocusKey = 0,
   selectedPlace = null,
   hoverDisabled = false,
   onMarkerClick,
@@ -775,7 +778,7 @@ export function MapViewGL({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any | null>(null)
   const draftPopupFactory = useCallback(() => new gl.Popup({ className: 'map-tooltip', maxWidth: '360px' }), [gl])
-  useAgentDraftGL(mapRef.current, mapReady, agentDraft, draftPopupFactory)
+  useAgentDraftGL(mapRef.current, mapReady, agentDraft, draftPopupFactory, selectedPlaceId != null)
   const hazardPopupFactory = useCallback(() => new gl.Popup({ className: 'map-tooltip trek-hazard-popup', maxWidth: '320px' }), [gl])
   useHazardLayerGL(mapRef.current, mapReady, hazards, hazardPopupFactory)
   // Beneath the planned route's casing, the GL twin of the Leaflet pane order.
@@ -2239,6 +2242,11 @@ export function MapViewGL({
   const pendingRouteFitRef = useRef<{ fitKey: number | null; routeKey: string } | null>(null)
   const fitRanRef = useRef(false)
   useEffect(() => {
+    if (selectedPlaceId != null) {
+      prevFitKey.current = fitKey
+      pendingRouteFitRef.current = null
+      return
+    }
     const fitKeyChanged = fitKey !== prevFitKey.current
     const routeArrivedForPendingFit =
       !fitKeyChanged
@@ -2289,7 +2297,7 @@ export function MapViewGL({
     run()
     if (!fitted && typeof map.once === 'function') map.once('load', run)
     if (routeArrivedForPendingFit) pendingRouteFitRef.current = null
-  }, [fitKey, routeFitKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fitKey, routeFitKey, selectedPlaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The caller's padding as a value, so a parent that builds the object inline on every
   // render does not move the camera each time it renders.
@@ -2332,7 +2340,7 @@ export function MapViewGL({
         padding: paddingOpts,
       })
     } catch { /* noop */ }
-  }, [selectedPlaceId, enableMapbox3d]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedPlaceId, placeFocusKey, enableMapbox3d]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // External center/zoom prop changes — jump without animation
   const jumpedToRef = useRef<[number, number] | null>(null)

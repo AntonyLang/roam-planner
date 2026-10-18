@@ -35,7 +35,7 @@ Docker 和源码部署均默认关闭小红书；不配置、不登录或平台�
 
 | 配置 | 用途 |
 | --- | --- |
-| `ROAM_VERSION` | 三个产品镜像的版本，默认 `0.2.0` |
+| `ROAM_VERSION` | 三个产品镜像的版本，默认 `0.2.1` |
 | `TREK_PORT` | 本机访问端口，默认 `3000` |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `AGENT_MODEL` / `AGENT_THINKING_LEVEL` | 首次模型默认值 |
 | `AMAP_API_KEY` / `GEOAPIFY_API_KEY` / `SOURCES_ROUTES_PROVIDER` | 首次地图默认值 |

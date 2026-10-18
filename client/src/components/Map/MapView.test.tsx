@@ -919,6 +919,33 @@ describe('MapView track casing pane (#776)', () => {
 })
 
 describe('MapView selection panning (#921)', () => {
+  it('keeps a selected stop centred when a pending day route arrives afterwards', () => {
+    const places = [buildMapPlace({ id: 8, lat: 48, lng: 2 })]
+    const { rerender } = render(<MapView places={places} dayPlaces={places} route={[]} fitKey={1} />)
+    rerender(<MapView places={places} dayPlaces={places} route={[]} fitKey={2} />)
+    rerender(<MapView places={places} dayPlaces={places} route={[]} fitKey={2} selectedPlaceId={8} />)
+    mapMock.fitBounds.mockClear()
+    rerender(<MapView places={places} dayPlaces={places} route={[[[48, 2], [49, 3]]]} fitKey={2} selectedPlaceId={8} />)
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+    rerender(<MapView places={places} dayPlaces={places} route={[[[48, 2], [49, 3]]]} fitKey={2} />)
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+    rerender(<MapView places={places} dayPlaces={places} route={[[[48, 2], [49, 3]]]} fitKey={3} />)
+    expect(mapMock.fitBounds).toHaveBeenCalled()
+  })
+
+  it('recentres the same selected place on a new sidebar focus request without refitting the day', () => {
+    const places = [buildMapPlace({ id: 8, lat: 48, lng: 2 })]
+    const { rerender } = render(<MapView places={places} selectedPlaceId={8} placeFocusKey={1} />)
+    mapMock.setView.mockClear()
+    mapMock.fitBounds.mockClear()
+    rerender(<MapView places={places} selectedPlaceId={8} placeFocusKey={2} />)
+    expect(mapMock.setView).toHaveBeenCalledWith([48, 2], 14, { animate: true })
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+    mapMock.setView.mockClear()
+    rerender(<MapView places={places} selectedPlaceId={8} placeFocusKey={2} hasInspector />)
+    expect(mapMock.setView).not.toHaveBeenCalled()
+  })
+
   it('FE-COMP-MAPVIEW-051: pans to the padding-corrected point when the map can project', () => {
     const projectable = mapMock as unknown as Record<string, unknown>
     const add = vi.fn(() => ({ x: 5, y: 6 }))

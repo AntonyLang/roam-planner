@@ -339,6 +339,14 @@ export default function PlaceInspector({
     ? ((selectedAssignmentId ? dayAssignments.find(a => a.id === selectedAssignmentId) : null)
       ?? dayAssignments.find(a => a.place?.id === place.id))
     : null
+  const description = place.description || googleDetails?.summary || ''
+  const dayNote = assignmentInDay?.notes || ''
+  const comparableText = (text: string) => text.replace(/\s+/g, ' ').trim()
+  // Keep the day-specific label when saved fields contain the same text.
+  const showDescription = description && comparableText(description) !== comparableText(dayNote)
+  const showPlaceNotes = place.notes
+    && comparableText(place.notes) !== comparableText(description)
+    && comparableText(place.notes) !== comparableText(dayNote)
   /** This stop belongs to a booked night rather than to the traveller. */
   const bookedNight = assignmentInDay
     ? assignmentInDay.accommodation_id != null
@@ -449,29 +457,27 @@ export default function PlaceInspector({
           {/* Description / Summary */}
           {roadtripActive && place.stop_type === 'charging' && <ChargingInfo placeId={place.id} />}
           {(roadtripEndDay || roadtripStay) && <VisitControls endDay={roadtripEndDay} stay={roadtripStay} />}
-          {(place.description || googleDetails?.summary) && (
+          {showDescription && (
             <div className="collab-note-md bg-surface-hover text-content-muted" style={{ borderRadius: 10, overflow: 'hidden', flexShrink: 0, fontSize: 'calc(12px * var(--fs-scale-body, 1))', lineHeight: '1.5', padding: '8px 12px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownLinkComponents}>{place.description || googleDetails?.summary || ''}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownLinkComponents}>{description}</Markdown>
             </div>
           )}
 
           {/* Notes */}
-          {place.notes && (
+          {showPlaceNotes && (
             <div className="collab-note-md bg-surface-hover text-content-muted" style={{ borderRadius: 10, overflow: 'hidden', flexShrink: 0, fontSize: 'calc(12px * var(--fs-scale-body, 1))', lineHeight: '1.5', padding: '8px 12px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
               <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownLinkComponents}>{place.notes}</Markdown>
             </div>
           )}
 
-          {/* Day-specific assignment note (#2163) — written via MCP/API or the
-              edit form; distinct from the pool-wide place.notes above, so it
-              carries an eyebrow saying which day-scope it belongs to. */}
-          {assignmentInDay?.notes && (
+          {/* Preserve the day scope even when the same note was also saved on the place. */}
+          {dayNote && (
             <div className="bg-surface-hover" style={{ borderRadius: 10, overflow: 'hidden', flexShrink: 0, padding: '8px 12px' }}>
               <div className="text-content-faint" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'calc(9px * var(--fs-scale-caption, 1))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
                 <StickyNote size={10} /> {t('places.assignmentNotes')}
               </div>
               <div className="collab-note-md text-content-muted" style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', lineHeight: '1.5', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownLinkComponents}>{assignmentInDay.notes}</Markdown>
+                <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownLinkComponents}>{dayNote}</Markdown>
               </div>
             </div>
           )}

@@ -68,3 +68,27 @@ it('fits a changed day or overview without returning to the previous focused sto
   rerender(<AgentDraftLayer draft={{...value,viewKey:'all-days',version:'2'}}/>)
   expect(map.flyTo).toHaveBeenCalledTimes(1)
 })
+
+it('keeps a sidebar-selected viewport when formal lines change day, then permits the next day fit',()=>{
+  const value={...draft(),viewKey:'all-days'}
+  const next={...value,viewKey:'day-1'}
+  const {rerender}=render(<AgentDraftLayer draft={value}/>)
+  map.fitBounds.mockClear()
+  rerender(<AgentDraftLayer draft={next} holdViewport/>)
+  rerender(<AgentDraftLayer draft={next}/>)
+  expect(map.fitBounds).not.toHaveBeenCalled()
+  rerender(<AgentDraftLayer draft={{...next,viewKey:'day-2'}}/>)
+  expect(map.fitBounds).toHaveBeenCalledTimes(1)
+})
+
+it('keeps the same viewport priority for GL formal lines',()=>{
+  const value={...draft(),viewKey:'all-days'}
+  const next={...value,viewKey:'day-1'}
+  const {rerender}=renderHook(({draft,hold})=>useAgentDraftGL(map,true,draft,undefined,hold),{initialProps:{draft:value,hold:false}})
+  map.fitBounds.mockClear()
+  rerender({draft:next,hold:true})
+  rerender({draft:next,hold:false})
+  expect(map.fitBounds).not.toHaveBeenCalled()
+  rerender({draft:{...next,viewKey:'day-2'},hold:false})
+  expect(map.fitBounds).toHaveBeenCalledTimes(1)
+})
