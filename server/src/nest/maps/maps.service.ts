@@ -12,7 +12,7 @@ import { Jimp } from 'jimp';
 import { readEnv, getAppUrl } from '../../app-config';
 import { safeFetchFollow, SsrfBlockedError } from '../../utils/ssrfGuard';
 import { discardBody, exceedsDeclaredLength, readCapped, readCappedText } from '../../utils/cappedFetch';
-import { resolveApiKey, type ApiKeySource } from '../settings/instance-api-keys';
+import { readInstanceApiKey, resolveApiKey, type ApiKeySource } from '../settings/instance-api-keys';
 import { isPlacesProviderChoice, type PlacesProviderChoice } from './providers/places-provider';
 import {
   AMAP_SHORT_HOSTS,
@@ -1039,6 +1039,8 @@ export class MapsService {
 
   /** The Amap credential, resolved through the identical three-step chain. */
   resolveAmapKey(userId: number): { key: string | null; source: ApiKeySource | null } {
+    if (this.database.get('SELECT 1 FROM app_settings WHERE key=?', 'roam_service_config'))
+      return { key: readInstanceApiKey(this.database, 'amap_api_key'), source: 'instance' };
     return resolveApiKey(this.database, 'amap_api_key', userId, readEnv().maps.amapApiKey);
   }
 

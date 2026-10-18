@@ -50,3 +50,44 @@ def test_no_exact_pair_never_substitutes_a_city_station(monkeypatch):
             assert data['result']['items'] == [] and data['result']['total_count'] == 0
             assert data['missing'] and data['result']['excluded_other_station_pairs'] == 1
     asyncio.run(run())
+
+
+def test_time_window_filters_full_station_pair_before_limit_and_has_a_distinct_cache_key(monkeypatch):
+    from app.mcp_contracts import Transport
+    monkeypatch.setattr(railway, '_cache', TtlCache())
+    calls=[]
+    base={'from_station':'上海虹桥','to_station':'苏州'}
+    async def upstream(*args):
+        calls.append(args)
+        return {'success':True,'trains':[
+            {**base,'train_no':'G1','start_time':'09:00','arrive_time':'09:40'},
+        ]*12+[
+            {**base,'train_no':'G2','start_time':'11:40','arrive_time':'12:20'},
+            {**base,'train_no':'G3','start_time':'17:50','arrive_time':'18:30'},
+            {**base,'train_no':'unknown'},
+            {**base,'from_station':'上海松江','train_no':'wrong','start_time':'17:50','arrive_time':'18:30'},
+        ]}
+    monkeypatch.setattr(railway,'_call_tool',upstream)
+    async def run():
+        async with httpx.AsyncClient() as client:
+            request=Transport.model_validate({**base,'date':'2026-10-24','departure_after':'17:00','departure_before':'19:00','limit':1}).model_dump(mode='json',exclude_none=True)
+            evening=await railway.query_transport(client,request)
+            assert [row['train_code'] for row in evening['result']['items']]==['G3']
+            assert evening['result']['station_pair_count']==15
+            assert evening['result']['excluded_outside_time_window']==14
+            assert evening['result']['excluded_other_station_pairs']==1
+            noon=await railway.query_transport(client,{**base,'date':'2026-10-24','arrival_after':'11:00','arrival_before':'13:00','limit':1})
+            assert [row['train_code'] for row in noon['result']['items']]==['G2']
+            cached=await railway.query_transport(client,request)
+            assert cached['cache']['hit'] is True
+            assert len(calls)==2
+    asyncio.run(run())
+
+
+def test_transport_contract_rejects_invalid_clocks_and_exposes_bounded_result_count():
+    from app.mcp_contracts import Transport
+    from pydantic import ValidationError
+    base={'from_station':'苏州','to_station':'上海虹桥','date':'2026-10-25'}
+    for patch in ({'departure_after':'24:00'},{'arrival_before':'18:70'},{'limit':101}):
+        with pytest.raises(ValidationError):
+            Transport.model_validate({**base,**patch})

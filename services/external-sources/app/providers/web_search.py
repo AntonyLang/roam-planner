@@ -5,7 +5,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel,ConfigDict,Field,field_validator
 from .errors import UpstreamError
-from .search_adapters import ADAPTERS
+from .search_adapters import ADAPTERS, public_endpoint
 
 class WebSearchQuery(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -44,7 +44,7 @@ async def query(client,parameters:WebSearchQuery):
         except UpstreamError as error:last=error
         else:
             attempts.append({'provider':adapter.name,'success':True,'elapsed_seconds':time.monotonic()-start})
-            return {'result':{'items':items},'source':{'type':adapter.name+'-web-search','url':url,'provider':adapter.name},
+            return {'result':{'items':items},'source':{'type':adapter.name+'-web-search','url':public_endpoint(url),'provider':adapter.name},
                 'queried_at':datetime.now(timezone.utc).isoformat(),'missing':[] if items else ['无网页搜索结果'],
                 'attempts':attempts,'raw_response':value,
                 'limitations':['返回搜索摘要而非完整网页；需要完整依据时读取原始链接。没有结果不触发来源切换。'] +

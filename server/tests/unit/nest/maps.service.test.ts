@@ -52,6 +52,7 @@ const {
   mockCacheSetInFlight,
   mockServeFilePath,
   mockProviderGet,
+  mockServiceConfigGet,
 } = vi.hoisted(() => ({
   mockDbGet: vi.fn((..._args: unknown[]) => undefined as any),
   mockDbRun: vi.fn(),
@@ -66,6 +67,7 @@ const {
   // key value as a provider name. Default undefined = the 'auto' choice, which is
   // what every install that predates Amap has.
   mockProviderGet: vi.fn((..._args: unknown[]) => undefined as any),
+  mockServiceConfigGet: vi.fn((..._args: unknown[]) => undefined as any),
   preparedSql: [] as string[],
   mockCheckSsrf: vi.fn(async (_url: string, _bypassInternalIpAllowed?: boolean): Promise<SsrfCheckStub> => ({
     allowed: true,
@@ -92,6 +94,7 @@ vi.mock('../../../src/db/database', () => ({
       return {
         get: (...args: unknown[]) => {
           if (!sql.includes('app_settings')) return mockDbGet(...args);
+          if (args[0] === 'roam_service_config') return mockServiceConfigGet(...args);
           // Keyed by the bound parameter, not just by the table: app_settings
           // holds both the instance-wide API keys and the provider choice.
           return args[0] === 'places_provider' ? mockProviderGet(...args) : mockInstanceGet(...args);
@@ -209,6 +212,7 @@ afterEach(() => {
   mockInstanceGet.mockReturnValue(undefined);
   mockProviderGet.mockReset();
   mockProviderGet.mockReturnValue(undefined);
+  mockServiceConfigGet.mockReset();
   preparedSql.length = 0;
   mockDbRun.mockReset();
   mockCheckSsrf.mockReset();
@@ -229,6 +233,20 @@ afterEach(() => {
   mockCacheSetInFlight.mockReset();
   mockServeFilePath.mockReset();
   mockServeFilePath.mockReturnValue(null);
+});
+
+describe('central map configuration', () => {
+  it('uses the saved instance key after in-product setup', () => {
+    mockServiceConfigGet.mockReturnValue({ 1: 1 });
+    mockInstanceGet.mockReturnValue({ value: 'saved-map-fixture' });
+    expect(svc.resolveAmapKey(1)).toEqual({ key: 'saved-map-fixture', source: 'instance' });
+  });
+  it('keeps an explicitly cleared central key cleared', () => {
+    mockServiceConfigGet.mockReturnValue({ 1: 1 });
+    mockInstanceGet.mockReturnValue({ value: '' });
+    mockDbGet.mockReturnValue({ amap_api_key: 'old-personal-fixture' });
+    expect(svc.resolveAmapKey(1).key).toBe(null);
+  });
 });
 
 // ── parseOpeningHours ─────────────────────────────────────────────────────────

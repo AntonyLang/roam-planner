@@ -22,7 +22,7 @@ export function createAgentServer(runtime: TravelRuntime) {
     const url = new URL(request.url!, 'http://localhost');
     try {
       if (url.pathname === '/healthz' || url.pathname === '/ready') return send(response, 200, {
-        status: 'ready', runtime: 'pi-durable', mcp: runtime.mcp.status(),
+        status: 'ready', runtime: 'pi-durable', configured: !!runtime.config.apiKey, mcp: runtime.mcp.status(),
       });
       const trip = /^\/v1\/trips\/(\d+)\/conversation$/.exec(url.pathname);
       if (trip && request.method === 'GET') {
@@ -78,7 +78,8 @@ export function createAgentServer(runtime: TravelRuntime) {
       return send(response, 405, { message: 'Method not allowed' });
     } catch (error) {
       if (response.headersSent) response.end();
-      else send(response, 500, { message: error instanceof Error ? error.message : String(error) });
+      else send(response, (error as {statusCode?:number})?.statusCode ?? 500,
+        { message: error instanceof Error ? error.message : String(error), code: (error as {code?:string})?.code });
     }
   });
 }

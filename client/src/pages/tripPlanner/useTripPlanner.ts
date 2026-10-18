@@ -2775,24 +2775,25 @@ export function useTripPlanner() {
     ? inspectorStay(roadtripRoutes.days, endDayStop, selectedPlace, can('place_edit', trip) ? editRoadtripStay : undefined)
     : undefined
 
-  // Build placeId → order-number map from the selected day's assignments. A service
+  // Build placeId → stop labels; overview labels also identify the day. A service
   // stop is passed over rather than counted: the map draws it without a badge and the
   // rail gives it no number, so a number spent on it left the pin after a fuel stop
   // wearing "3" where the rail said "2".
   const dayOrderMap = useMemo(() => {
-    if (!selectedDayId) return {}
-    const da = assignments[String(selectedDayId)] || []
-    const sorted = [...da].sort((a, b) => a.order_index - b.order_index)
-    const map = {}
-    let counted = 0
-    sorted.forEach(a => {
-      if (!a.place?.id || isServiceStopType(a.place.stop_type)) return
-      counted += 1
-      if (!map[a.place.id]) map[a.place.id] = []
-      map[a.place.id].push(counted)
+    const visibleDays = selectedDayId ? [{id:selectedDayId,day_number:0}] : [...days].sort((a,b) => a.day_number-b.day_number)
+    const map: Record<number, (number|string)[]> = {}
+    visibleDays.forEach(day => {
+      const sorted = [...(assignments[String(day.id)] || [])].sort((a,b) => a.order_index-b.order_index)
+      let counted = 0
+      sorted.forEach(a => {
+        if (!a.place?.id || isServiceStopType(a.place.stop_type)) return
+        counted += 1
+        if (!map[a.place.id]) map[a.place.id] = []
+        map[a.place.id].push(selectedDayId ? counted : `D${day.day_number}·${counted}`)
+      })
     })
     return map
-  }, [selectedDayId, assignments])
+  }, [selectedDayId, assignments, days])
 
   // Places assigned to selected day (with coords) — used for map fitting
   const dayPlaces = useMemo(() => {

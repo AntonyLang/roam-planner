@@ -1,4 +1,4 @@
-import {act,fireEvent,render,renderHook,screen,waitFor} from '@testing-library/react'
+import {act,fireEvent,render,renderHook,screen,waitFor} from '../../../tests/helpers/render'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {TripAssistant,useTripAssistant} from './TripAssistant'
 import {useTripStore} from '../../store/tripStore'
@@ -68,9 +68,11 @@ it('labels stops by date and filters the map using the native selected day',asyn
   const {result,unmount}=renderHook(()=>useTripAssistant(3))
   await waitFor(()=>expect(result.current.map.points).toHaveLength(2))
   expect(result.current.map.points.map(p=>p.label)).toEqual(['2026-10-12 · 1','2026-10-13 · 1'])
+  expect(result.current.map.points.map(p=>p.orderLabel)).toEqual(['D1·1','D2·1'])
   const initialKey=result.current.map.viewKey
   act(()=>useTripStore.setState({selectedDayId:11}))
   expect(result.current.map.points.map(p=>p.name)).toEqual(['八大关'])
+  expect(result.current.map.points.map(p=>p.orderLabel)).toEqual(['1'])
   expect(result.current.map.viewKey).not.toBe(initialKey)
   act(()=>useTripStore.setState({selectedDayId:null}))
   expect(result.current.map.points).toHaveLength(2)
@@ -84,6 +86,23 @@ it('uses the fixed trip conversation and sends additions to the main Agent',asyn
   await act(async()=>{await result.current.send('修改这版草稿')})
   expect(agent.send).toHaveBeenCalledWith('修改这版草稿')
   expect(api.post).not.toHaveBeenCalled()
+  unmount()
+})
+
+it('keeps rail order when a stop has no coordinates and shows every coincident visit number',async()=>{
+  useTripStore.setState({trip:{id:3} as any,days:[{id:10,day_number:1},{id:11,day_number:2}] as any})
+  const located={latitude:36,longitude:120,coordinate_system:'WGS84',notes:''}
+  agent.travel={draft:{version:1,activities:[
+    {ref:'a',name:'酒店',day_number:1,...located},
+    {ref:'b',name:'待选午餐',day_number:1,notes:''},
+    {ref:'c',name:'返回酒店',day_number:1,...located},
+    {ref:'d',name:'酒店早餐',day_number:2,...located},
+  ]},receipts:[]}
+  const {result,unmount}=renderHook(()=>useTripAssistant(3))
+  await waitFor(()=>expect(result.current.map.points).toHaveLength(3))
+  expect(result.current.map.points[0].orderLabel).toBe('D1·1\nD1·3\nD2·1')
+  act(()=>useTripStore.setState({selectedDayId:10}))
+  expect(result.current.map.points.map(p=>p.orderLabel)).toEqual(['1\n3','1\n3'])
   unmount()
 })
 

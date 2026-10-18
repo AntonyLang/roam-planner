@@ -113,6 +113,8 @@ export const PUBLIC_ROUTE_ALLOW_LIST: string[] = [
   // provider can send one, and the handler's only effect is to schedule a sync
   // run. It never reads the request body as data.
   'DocSyncWebhookController.nudge',
+  // Container-only configuration uses the installation's private service token.
+  'InternalServiceConfigController.read',
   'FeaturesController.features',
   // The container/uptime probe.
   'FeaturesController.health',

@@ -1,43 +1,49 @@
-# 配置
+# 服务配置
 
-从根目录的 [product.env.example](../product.env.example) 复制出 `.env.product`。所有真实密钥只填写在本地文件中；修改后重新执行 Compose 启动命令。
+首次启动不用先写 Key 文件。打开产品后会自动进入引导；日后可从首页或用户菜单打开“服务配置”。
+
+1. 填写模型服务地址、模型 ID 和 API Key，保存并检查连接。检查会执行一次很小的工具调用请求，可能产生少量模型费用。
+2. 按需配置地图和资料搜索；这些服务可以稍后再开。
+3. 模型连接通过后完成引导，或点“稍后配置，先使用”直接进入首页。缺少 Key 时仍可管理旅程和查看地图，仅依赖该配置的服务会提示补齐。
+
+密钥字段只接受写入，页面显示是否已配置。留空保留原 Key，“清除已存 Key”才会清除。保存的服务配置加密存放在旅程数据卷，优先于环境变量；下一次规划使用新配置，当前正在生成的请求不被强行打断。
+
+## 地图
+
+在[高德控制台](https://lbs.amap.com/api/mcp-server/create-project-and-key)创建 **Web 服务**类型 Key，在页面选择高德并填写。当前使用后端 REST 适配器获取地点与完整道路轨迹，转换坐标后交给页面绘制。高德官方 MCP 的地点与跳转能力也作为职责边界参考；地图绘图仍需完整轨迹。
+
+Geoapify 是可选路网来源，支持步行、驾车估时，不提供公交路线。连接检查会真实请求选中的服务；有 Key 不代表所有供应商权限均已开通。
+
+## 模型
+
+连接使用 DeepSeek 的 Chat Completions 适配器。可填写兼容地址与实际模型 ID，但服务必须支持工具调用。默认 `deepseek-flash`；思考强度由所用模型适配器解释。
+
+Docker Desktop 容器访问宿主机模型服务可使用 `http://host.docker.internal:端口/v1`，`127.0.0.1` 指向容器自身。页面中的服务地址不接受嵌入密码或查询参数；API Key 使用独立密码字段。
+
+## 小红书
+
+Docker 和源码部署均默认关闭小红书；不配置、不登录或平台受限时，助手会使用其他可用来源继续规划。在配置页主动启用并保存来源后，点击“开始扫码登录”，用自己的小红书 App 扫码确认。浏览器运行在 Sources 容器内；只有真实用户接口确认非访客身份后才显示已登录。遇到平台验证时需由本人完成，程序不会绕过验证。
+
+登录状态与加密密钥保存在 `sources_data` 卷，页面和日志不返回 cookie。退出登录会清除该来源的本地登录状态和访问缓存；平台要求重新验证或 session 过期时，请重新扫码。小红书是可选来源，未登录不阻挡其他规划能力。
+
+小红书可能限制容器或云服务器的出口网络。若页面返回访问风险代码（例如 `300012`），将显示限制原因并停止等待；不保证所有部署网络都能生成二维码，程序不绕过平台限制。
+
+
+## 环境变量与铁路
+
+自动部署仍可复制根目录 [product.env.example](../product.env.example) 为 `.env.product`，使用 `docker compose --env-file .env.product …`。环境变量提供首次默认值；页面保存后，以保存的配置为准。
 
 | 配置 | 用途 |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | 模型服务凭据，启动 Agent 必填 |
-| `DEEPSEEK_BASE_URL` | 默认官方 DeepSeek 地址；也可填兼容的 Chat Completions 服务地址 |
-| `AGENT_MODEL` | 服务实际支持的模型 ID，默认 `deepseek-flash` |
-| `AGENT_THINKING_LEVEL` | 默认 `high`，由所用模型适配器解释 |
-| `AMAP_API_KEY` | 高德中国地点、步行、驾车和公共交通查询 |
-| `SOURCES_ROUTES_PROVIDER` | `amap` 或 `geoapify`，显式选择路网来源 |
-| `GEOAPIFY_API_KEY` | 选择 Geoapify 时填写，支持步行和驾车路网估时 |
-| `TREK_PORT` | 本机访问端口，默认 3000 |
-| `RAILWAY_MCP_URL` | 可选铁路查询服务的 MCP 地址 |
-| `WEB_SEARCH_PROVIDERS` | 默认 `exa`，公开网页检索来源 |
-| `EXA_MCP_URL` | Exa MCP 服务地址 |
+| `ROAM_VERSION` | 三个产品镜像的版本，默认 `0.2.0` |
+| `TREK_PORT` | 本机访问端口，默认 `3000` |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `AGENT_MODEL` / `AGENT_THINKING_LEVEL` | 首次模型默认值 |
+| `AMAP_API_KEY` / `GEOAPIFY_API_KEY` / `SOURCES_ROUTES_PROVIDER` | 首次地图默认值 |
+| `EXA_MCP_URL` / `WEB_SEARCH_PROVIDERS` | 网页检索地址与适配器，默认 Exa |
+| `RAILWAY_MCP_URL` | 默认连接随 Compose 启动的铁路 MCP；显式设为空可停用查询 |
 
-## 高德 Key
+铁路 MCP 默认随 `docker compose up` 启动，Sources 通过 `http://railway:8000/mcp` 接入，不需要 Key。可覆盖 `RAILWAY_MCP_URL` 接入自己的兼容服务；旧配置文件若把此值留空，请更新为默认地址。铁路来源使用独立的 [drfccv/mcp-server-12306](https://github.com/drfccv/mcp-server-12306) 容器，固定镜像摘要，属于第三方社区适配器。
 
-在[高德控制台](https://lbs.amap.com/api/mcp-server/create-project-and-key)创建 **Web 服务** 类型 Key，填写 `AMAP_API_KEY`。当前地图数据由后端 REST 适配器获取，坐标转换后交给页面绘制。
+查询用于核实车次和时刻，结果按实际出发站与到达站匹配，避免把同城其他车站当成目标站。地图上的铁路线始终是站到站示意，非实际轨道；未查询或未匹配的班次保留未核实状态。当前没有实时航班检索、出票或预订能力。
 
-```sh
-docker compose --env-file .env.product up -d --wait
-```
-
-高德官方 MCP 可提供地点查询和高德端链接；本项目保留 REST 路网适配以取得地图所需完整轨迹。改变 Key 无需修改源码。
-
-## 兼容模型服务
-
-模型连接使用 DeepSeek 的 Chat Completions 适配器。自定义服务须兼容该协议及工具调用；仅修改地址并不意味着支持所有供应商特性。容器访问宿主机服务时，Docker Desktop 可使用 `http://host.docker.internal:端口/v1`，不能用指向容器自身的 `127.0.0.1`。
-
-默认模型名称已按 [DeepSeek 官方文档](https://api-docs.deepseek.com/quick_start/pricing/)核对（2026-10-18）。计费以所用服务为准，本地模型用量报告不等同于供应商账单。
-
-## 可选铁路查询
-
-将 `RAILWAY_MCP_URL` 设为 `http://railway:8000/mcp` 后启用附带服务：
-
-```sh
-docker compose --env-file .env.product --profile railway up --build -d --wait
-```
-
-铁路查询用于核实车次和时刻；未查询或未匹配的班次仍以未核实示意呈现。当前没有实时航班检索或出票能力。
+助手可按当地出发/到达时刻筛选，并控制返回数量；筛选先于截取结果，不会因默认只返回10班而漏掉全天后面的候选。到达时刻条件本身不代表到达日期，跨夜列车仍须结合出发日期与运行时长判断。

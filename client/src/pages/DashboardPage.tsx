@@ -19,6 +19,7 @@ import {
   Plus, Edit2, Trash2, Archive, ArchiveRestore, Copy, ArrowRight, MapPin,
   Plane, Hotel, Utensils, Clock, RefreshCw, ArrowRightLeft, Calendar,
   LayoutGrid, List, Ticket, X, CalendarPlus, ParkingSquare, LogIn, LogOut,
+  Sparkles,
 } from 'lucide-react'
 import { IcsSubscribeModal } from '../components/Planner/IcsSubscribeModal'
 import CollectionsWidget from '../components/Dashboard/CollectionsWidget'
@@ -32,6 +33,7 @@ import { CURRENCIES } from '../components/Budget/BudgetPanel.constants'
 import { convertDistance, getDistanceUnitLabel } from '../utils/units'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAddonStore } from '../store/addonStore'
+import { useServicesStore } from '../store/servicesStore'
 import { normalizeAppearance } from '@trek/shared'
 import '../styles/dashboard.css'
 
@@ -125,6 +127,7 @@ function DashboardPageDesktop(): React.ReactElement {
   // Dashboard widget visibility (from the appearance config). Phones never reach this
   // component — DashboardPage routes them to MDashboard — so only the desktop set applies.
   const appearanceCfg = useSettingsStore(s => s.settings.appearance)
+  const needsModelSetup = useServicesStore(s => s.config?.needs_setup ?? false)
   const dashCfg = normalizeAppearance(appearanceCfg).dashboard
   const sideWidgets = dashCfg.desktop
   const showCurrency = sideWidgets.currency
@@ -156,6 +159,16 @@ function DashboardPageDesktop(): React.ReactElement {
         <MobileTopBar />
         <main className="page" data-no-sidebar={sidebarVisible ? undefined : 'true'}>
           <div className="page-main">
+            {needsModelSetup && (
+              <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3" role="status">
+                <Sparkles size={18} className="flex-none text-amber-700 dark:text-amber-300" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-content">{t('dashboard.services.needsModelTitle')}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-content-muted">{t('dashboard.services.needsModelText')}</p>
+                </div>
+                <button type="button" onClick={() => navigate('/services')} className="rounded-lg border border-edge bg-surface-card px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-tertiary">{t('dashboard.services.configure')}</button>
+              </div>
+            )}
             {loadError && (
               <div className="dash-error" role="alert">
                 <span className="dash-error-txt">{t('dashboard.loadErrorBanner')}</span>

@@ -36,6 +36,13 @@ class Transport(Input):
     from_station: str = Field(min_length=1,max_length=100)
     to_station: str = Field(min_length=1,max_length=100)
     date: date
+    departure_after: str | None = Field(default=None,pattern=r'^(?:[01]\d|2[0-3]):[0-5]\d$',description='出发当地时刻下限（含），HH:MM')
+    departure_before: str | None = Field(default=None,pattern=r'^(?:[01]\d|2[0-3]):[0-5]\d$',description='出发当地时刻上限（含），HH:MM')
+    arrival_after: str | None = Field(default=None,pattern=r'^(?:[01]\d|2[0-3]):[0-5]\d$',description='到达当地时刻下限（含），HH:MM；不表示到达日期')
+    arrival_before: str | None = Field(default=None,pattern=r'^(?:[01]\d|2[0-3]):[0-5]\d$',description='到达当地时刻上限（含），HH:MM；不表示到达日期')
+    limit: int = Field(default=10,ge=1,le=100,strict=True,description='精确站对与时间窗口筛选后的最多结果数')
+    include_price: bool = Field(default=False,description='查询票价，会额外请求上游')
+    include_transfer: bool = Field(default=False,description='附中转换乘候选，会额外请求上游；候选仍需逐段核实')
 
 from .providers.venues import VenueQuery
 SOURCE_MODELS = {'places':Places,'routes':Routes,'weather':Weather,'transport':Transport,'xhs':SearchQuery,'xhs_note':NoteQuery,'web':WebSearchQuery,'web_fetch':FetchQuery,'venues':VenueQuery}

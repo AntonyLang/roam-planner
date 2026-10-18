@@ -3,7 +3,9 @@ from dataclasses import dataclass
 import os
 import json
 import re
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
+
+from ..runtime_config import current_config
 
 @dataclass(frozen=True)
 class SearchAdapter:
@@ -48,13 +50,16 @@ class SearchAdapter:
 
 class ExaMcpAdapter(SearchAdapter):
     """The keyless Exa MCP source used by pi-web-access (exa.ts)."""
-    def available(self):return True
+    def available(self):return bool(current_config().search.exa_mcp_url)
 
     def request(self,query):
         qualifiers={'oneDay':'past 24 hours','oneWeek':'past week','oneMonth':'past month','oneYear':'past year'}
         text=query.query + (' '+qualifiers[query.freshness] if query.freshness in qualifiers else '')
-        endpoint=os.getenv(self.endpoint_env,self.endpoint)
-        return 'POST',endpoint,{'params':{'tools':'web_search_exa'},
+        endpoint=current_config().search.exa_mcp_url
+        parts=urlsplit(endpoint)
+        params=parse_qsl(parts.query,keep_blank_values=True)+[('tools','web_search_exa')]
+        request_url=urlunsplit((parts.scheme,parts.netloc,parts.path,'',''))
+        return 'POST',request_url,{'params':params,
             'headers':{'Content-Type':'application/json','Accept':'application/json, text/event-stream','x-exa-source':'travel-agent'},
             'json':{'jsonrpc':'2.0','id':1,'method':'tools/call',
                     'params':{'name':'web_search_exa','arguments':{'query':text,'numResults':query.limit}}}}
@@ -68,7 +73,7 @@ class ExaMcpAdapter(SearchAdapter):
     def normalize(self,value):
         if value.get('error') or value.get('result',{}).get('isError'):
             from .errors import UpstreamError
-            raise UpstreamError('UPSTREAM_ERROR','Exa MCP 搜索失败：'+str(value.get('error') or value['result'].get('content'))[:200])
+            raise UpstreamError('UPSTREAM_ERROR','Exa MCP 搜索失败')
         text='\n'.join(part['text'] for part in value['result'].get('content',[]) if part.get('type')=='text')
         if not text.strip() or 'no results found' in text.casefold():return []
         items=[]
@@ -84,6 +89,14 @@ class ExaMcpAdapter(SearchAdapter):
                 'published_at':field('Published Date'),'content_scope':'search_summary','provider':'exa'})
         if not items:raise ValueError('Unrecognized Exa search result format')
         return items
+
+
+def public_endpoint(url):
+    parts=urlsplit(url)
+    host=parts.hostname or ''
+    if parts.port:
+        host=f'{host}:{parts.port}'
+    return urlunsplit((parts.scheme,host,parts.path,'',''))
 
 ADAPTERS={a.name:a for a in (
     ExaMcpAdapter('exa','','EXA_MCP_URL','https://mcp.exa.ai/mcp'),

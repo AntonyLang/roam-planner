@@ -15,6 +15,7 @@ from .cache import TtlCache
 from .coordinates import gcj02_to_wgs84, point, wgs84_to_gcj02
 from .errors import UpstreamError
 from .support import now_iso, text, with_cache_meta
+from ..runtime_config import current_config
 
 
 class Center(BaseModel):
@@ -64,7 +65,7 @@ _lock = asyncio.Lock()
 
 def stats():
     return {'cache': _cache.stats(),
-            'geoapify_configured': bool(os.getenv('GEOAPIFY_API_KEY', '').strip()),
+            'geoapify_configured': bool(current_config().maps.geoapify_key.strip()),
             'foursquare_configured': bool(os.getenv('FOURSQUARE_API_KEY', '').strip())}
 
 
@@ -180,7 +181,7 @@ async def _fetch(client, provider, query, lat, lng):
         data_time = (body.get('osm3s') or {}).get('timestamp_osm_base')
         truncated, attribution = len(rows) >= n, '© OpenStreetMap contributors / ODbL'
     elif provider == 'geoapify':
-        key = os.getenv('GEOAPIFY_API_KEY', '').strip()
+        key = current_config().maps.geoapify_key.strip()
         if not key:
             raise UpstreamError('SOURCE_NOT_CONFIGURED', '未配置 GEOAPIFY_API_KEY')
         url = 'https://api.geoapify.com/v2/places'
@@ -249,7 +250,7 @@ async def query_venues(client: httpx.AsyncClient, query: VenueQuery):
     domestic = 72.004 <= lng <= 137.8347 and .8293 <= lat <= 55.8271
     providers = [query.provider] if query.provider != 'auto' else (
         (['amap'] if domestic and amap.api_key() else []) + ['trek'] +
-        (['geoapify'] if os.getenv('GEOAPIFY_API_KEY', '').strip() else []) +
+        (['geoapify'] if current_config().maps.geoapify_key.strip() else []) +
         (['foursquare'] if os.getenv('FOURSQUARE_API_KEY', '').strip() else []) + ['overpass'])
     key = json.dumps({'query':query.model_dump(), 'providers':providers,
                       'trek':os.getenv('TREK_PLACES_URL'), 'overpass':os.getenv('OVERPASS_URL')}, sort_keys=True)

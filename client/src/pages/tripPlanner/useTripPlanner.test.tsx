@@ -794,6 +794,20 @@ describe('useTripPlanner — map derivations', () => {
     expect(result.current.dayPlaces).toEqual([])
   })
 
+  it('numbers overview stops by day, retaining repeat visits and skipping service stops', async () => {
+    const a=geo(1), b=geo(2), pump=geo(3,{stop_type:'fuel'})
+    seedTrip({places:[a,b,pump], days:[buildDay({id:8,day_number:2}),buildDay({id:7,day_number:1})],
+      assignments:{'7':[
+        buildAssignment({id:11,day_id:7,place:b,order_index:2}),
+        buildAssignment({id:10,day_id:7,place:a,order_index:0}),
+        buildAssignment({id:12,day_id:7,place:pump,order_index:1}),
+      ],'8':[buildAssignment({id:13,day_id:8,place:a,order_index:0})]}})
+    const {result}=await renderPlanner()
+    expect(result.current.dayOrderMap).toEqual({1:['D1·1','D2·1'],2:['D1·2']})
+    act(()=>useTripStore.setState({selectedDayId:7}))
+    expect(result.current.dayOrderMap).toEqual({1:[1],2:[2]})
+  })
+
   it('FE-TP-HOOK-033: the first trip with geo places bumps the map fit key exactly once', async () => {
     seedTrip({ places: [geo(1)] })
 

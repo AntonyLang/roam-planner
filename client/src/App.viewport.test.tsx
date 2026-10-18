@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useAuthStore } from './store/authStore'
 import { useAddonStore } from './store/addonStore'
+import { useServicesStore } from './store/servicesStore'
 import { resetAllStores } from '../tests/helpers/store'
 import { buildUser } from '../tests/helpers/factories'
 import App from './App'
@@ -75,12 +76,27 @@ beforeEach(() => {
   vi.clearAllMocks()
   isPhone.value = false
   // An admin passes the role check on /admin; every other route ignores it.
+  const user = buildUser({ role: 'admin', mfa_enabled: true })
   useAuthStore.setState({
     isLoading: false,
     isAuthenticated: true,
-    user: buildUser({ role: 'admin', mfa_enabled: true }),
+    user,
     appRequireMfa: false,
     loadUser: vi.fn().mockResolvedValue(undefined),
+  })
+  useServicesStore.setState({
+    userId: user.id,
+    config: {
+      setup_complete: true,
+      needs_setup: false,
+      model: { base_url: 'https://model.example/v1', model_id: 'travel-model', thinking_level: 'medium', api_key_configured: true },
+      maps: { provider: 'amap', amap_key_configured: false, geoapify_key_configured: false },
+      search: { exa_mcp_url: '' },
+      xhs: { enabled: false },
+    },
+    isLoading: false,
+    isLoaded: true,
+    loadError: false,
   })
   // /journey and /collections sit behind addons; without this they redirect to
   // the dashboard and the route under test never renders.

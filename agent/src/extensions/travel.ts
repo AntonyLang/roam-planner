@@ -52,7 +52,7 @@ export function createTrekDeliveryExtension() {
 export function createTravelExtension(skillsDir: string, options: { includeCatalog?: boolean } = {}) {
   const skills=options.includeCatalog === false ? undefined : loadSkillsFromDir({dir:skillsDir,source:'travel'});
   return defineExtension({name:'travel',sections:[
-    section('travel-role',()=> '你是旅游规划 Agent。依据用户目标和已有安排发现、比较体验与候选，用合适来源核实交通、开放和天气。研究范围、补查、分工与写入时机由主 Agent 判断。用户沟通与子 Agent 协作统一经过主 Agent。'),
+    section('travel-role',()=> '你是旅游规划 Agent。依据用户目标和已有安排发现、比较体验与候选，用合适来源核实交通、开放和天气。小红书为可选来源，默认关闭；未启用、未登录或被平台限制时，使用其他可用来源继续，不要求用户先登录或配置才能规划。只有用户明确要求依赖小红书内容时，说明限制并让用户选择是否启用。研究范围、补查、分工与写入时机由主 Agent 判断。用户沟通与子 Agent 协作统一经过主 Agent。'),
     ...(skills ? [section('skills',()=>formatSkillsForPrompt(skills.skills))] : []),
   ]});
 }

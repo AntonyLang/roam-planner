@@ -10,13 +10,16 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { sanitizedMarkdownComponents, sanitizedMarkdownPlugins } from '../shared/markdownSanitize'
+import { useServicesStore } from '../../store/servicesStore'
+import { useTranslation } from '../../i18n'
+import { useNavigate } from 'react-router'
 
 type Activity = AgentPlan['activities'][number]
 type Event = { seq: number; kind: string; task_id: string; payload: any }
 type Task = { id: string; status: string; pending?: any; error?: any; result?: any; input_revision: number }
 type CandidateRecord = { candidate_id: string; candidate_version: number; adopted_at: string | null; plan?: AgentPlan }
 type CandidateAdoptionState = { tripId: number; candidateId: string; candidateVersion: number; loaded: boolean; record?: CandidateRecord; error?: string }
-export type DraftMap = { points: { ref: string; name: string; lat: number; lng: number; label: string; notes: string; dayNumber:number; labelDirection?:'top'|'bottom' }[]; lines: number[][][]; segments?: (DraftRouteSegment & {label:string})[]; formalSegments?: (DraftRouteSegment & {label:string})[]; formalLines?: number[][][]; focus?: string; adopted?: boolean; version: string; viewKey?:string; padding?: {left:number;right:number} }
+export type DraftMap = { points: { ref: string; name: string; lat: number; lng: number; label: string; orderLabel: string; notes: string; dayNumber:number; labelDirection?:'top'|'bottom' }[]; lines: number[][][]; segments?: (DraftRouteSegment & {label:string})[]; formalSegments?: (DraftRouteSegment & {label:string})[]; formalLines?: number[][][]; focus?: string; adopted?: boolean; version: string; viewKey?:string; padding?: {left:number;right:number} }
 const requestId = () => crypto.randomUUID()
 const point = (a: Activity) => a.latitude == null || a.longitude == null ? null : a.coordinate_system === 'GCJ02' ? gcj02ToWgs84(a.latitude, a.longitude) : { lat: a.latitude, lng: a.longitude }
 const statusText: Record<string, string> = { queued: '准备规划', running: '正在规划，可随时补充要求', stopping: '正在收尾并保存进度', waiting_user: '需要你补充', succeeded: '已回复', stopped:'已停止', failed: '规划暂时中断', budget_stopped: '已到本次预算上限' }
@@ -123,9 +126,16 @@ export function useTripAssistant(tripId: number) {
       const index=(counts.get(a.day_number)??0)+1;counts.set(a.day_number,index)
       const p = point(a)
       return p&&(selectedDay==null||selectedDay===a.day_number)?[{ ...p, ref: a.ref, name: a.name, dayNumber:a.day_number,
-        label: `${dayLabel(a.day_number)} · ${index}`, labelDirection:index%2?'top' as const:'bottom' as const,
+        label: `${dayLabel(a.day_number)} · ${index}`, orderLabel:selectedDay==null?`D${a.day_number}·${index}`:String(index), labelDirection:index%2?'top' as const:'bottom' as const,
         notes: [a.start_time, a.end_time].filter(Boolean).join('–') + ' ' + a.notes }]:[]
     })
+    const coincidentOrders = new Map<string,string[]>()
+    points.forEach(p => {
+      const key=`${p.lat},${p.lng}`
+      const labels=coincidentOrders.get(key)??[]
+      labels.push(p.orderLabel);coincidentOrders.set(key,labels)
+    })
+    points.forEach(p => {p.orderLabel=coincidentOrders.get(`${p.lat},${p.lng}`)!.join('\n')})
     const routeIds: string[] = (plan?.extensions?.route_source_ids ?? (plan?.extensions?.map_draft as { route_source_ids?: string[] } | undefined)?.route_source_ids ?? draft?.payload.routes ?? []) as string[]
     // Only actual adoption records authorize reusing route sources. Match them
     // against today's formal graph, so edits and inserted stops break stale edges.
@@ -178,6 +188,9 @@ export function useTripAssistant(tripId: number) {
 }
 
 export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssistant> }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const needsModelSetup = useServicesStore(s => s.config?.needs_setup ?? false)
   const [text, setText] = useState('')
   const [drag, setDrag] = useState<number | null>(null)
   const body = useRef<HTMLDivElement>(null)
@@ -192,7 +205,7 @@ export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssis
   useEffect(() => { setText(''); followed.current = true; setAwayFromBottom(false) }, [agent.session])
   const messages=agent.native.entries.flatMap(entry=>entry.model?.[0]&&['pi.user','pi.assistant'].includes(entry.kind)?
     [{key:entry.id,role:entry.model[0].role,text:messageText(entry.model[0])}].filter(m=>m.text):[])
-  const canSend=!agent.sending&&!!text.trim()&&agent.native.stopState!=='stopping'
+  const canSend=!needsModelSetup&&!agent.sending&&!!text.trim()&&agent.native.stopState!=='stopping'
   const active=agent.native.running||agent.native.children.some(child=>['running','waiting','stopping'].includes(child.status))
   const partialText=messageText(agent.native.partial)
   const submit = async (event: React.FormEvent) => {
@@ -234,8 +247,12 @@ export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssis
       {agent.error && <p role="alert">{agent.error}</p>}
     </div>
     {awayFromBottom&&<button type="button" className="assistant-latest" onClick={scrollToLatest}>↓ 回到最新消息</button>}
+    {needsModelSetup && <div className="mx-3 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-content-secondary" role="alert">
+      <p>{t('services.planningBlocked')}</p>
+      <button type="button" onClick={() => navigate('/services')} className="mt-2 font-semibold text-content underline underline-offset-2">{t('services.openConfiguration')}</button>
+    </div>}
     <form onSubmit={submit} className="assistant-compose">
-      <textarea ref={composer} aria-label="旅行要求或修改意见" value={text} onChange={e => setText(e.target.value)} onKeyDown={e=>{
+      <textarea ref={composer} aria-label="旅行要求或修改意见" value={text} disabled={needsModelSetup} onChange={e => setText(e.target.value)} onKeyDown={e=>{
         if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&e.keyCode!==229){e.preventDefault();if(canSend)e.currentTarget.form?.requestSubmit()}
       }} placeholder={active ? '随时补充，助手会接着处理…' : '聊聊你的旅行想法…'} rows={3} />
       <div className="assistant-compose-actions"><span>Enter 发送 · Shift+Enter 换行</span><div>{active&&<button className="assistant-stop" type="button" disabled={agent.native.stopState==='stopping'} onClick={agent.native.stop}>{agent.native.stopState==='stopping'?'正在收尾':'停止'}</button>}<button type="submit" disabled={!canSend}>{agent.sending?'发送中…':active?'补充要求':'发送'}</button></div></div>

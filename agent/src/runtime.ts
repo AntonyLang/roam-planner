@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createRegistry, configure, Harness, type ConversationId, type Extension, defineExtension, watchEvents } from '@earendil-works/pi-durable';
-import type { Models } from '@earendil-works/pi-ai/models';
+import type { Models, MutableModels } from '@earendil-works/pi-ai/models';
 import { createReadTool } from '@earendil-works/pi-durable/tools';
 import { createToolSearchExtension } from '@earendil-works/pi-durable/tool-search';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
@@ -13,6 +13,7 @@ import { createSubagentExtensions, listAgentStates, requestStop } from './extens
 import { createMcpConnections } from './extensions/mcp.ts';
 import { configuredModels } from './models.ts';
 import type { Config } from './config.ts';
+import { serviceSettings } from './service-settings.ts';
 
 export type RuntimeOptions = {
   deliveryExtension?: Extension;
@@ -26,6 +27,8 @@ export type RuntimeOptions = {
 };
 
 export async function openRuntime(config: Config, providedModels?: Models, options: RuntimeOptions = {}) {
+  const readSettings = serviceSettings(config);
+  await readSettings();
   const context = BACKGROUND_CONTEXT;
   const registry = createRegistry();
   const { extension, childRole } = createSubagentExtensions(config.configuredModels);
@@ -60,6 +63,13 @@ export async function openRuntime(config: Config, providedModels?: Models, optio
   await mkdir(path.dirname(config.database), { recursive: true });
   const storage = await openNodeSqliteStorage(config.database);
   const models = providedModels ?? configuredModels(config);
+  const refreshSettings = async () => {
+    if (await readSettings() && !providedModels) {
+      configuredModels(config, models as MutableModels);
+      const refreshed = createSubagentExtensions(config.configuredModels);
+      registry.install(refreshed.extension); registry.install(refreshed.childRole);
+    }
+  };
   const harness = await Harness.open(storage, {
     models, registry,
     ...(options.disableRetries ? { settings: { retry: { enabled: false, maxRetries: 0 }, stream: { maxRetries: 0 } } } : {}),
@@ -87,10 +97,15 @@ export async function openRuntime(config: Config, providedModels?: Models, optio
     return (await harness.conversation(id, context))!;
   }
   async function submit(id: ConversationId, content: string, requestId: string) {
+    await refreshSettings();
+    if (!providedModels && config.serviceSettingsUrl && !config.apiKey)
+      throw Object.assign(new Error('请先在首页的服务配置中设置并检查规划模型。'), { statusCode: 503, code: 'MODEL_NOT_CONFIGURED' });
     const conversation = (await harness.conversation(id, context))!;
     if ((await harness.snapshot(AgentRole,id,context))?.mainId) throw new Error('请通过主 Agent 转交对子 Agent 的输入。');
     const existing = await storage.submissionByRequest(id, requestId, context);
     if (existing) return { conversation_id: id, submission_id: existing.id, ...existing };
+    if (config.serviceSettingsUrl && !providedModels)
+      await harness.commit(tx => configure(tx, id, { model: config.model, thinkingLevel: config.thinkingLevel }), context);
     await mcp.connect();
     await harness.commit(async tx => {
       const state = await tx.doc(Subagents, id); state.stopState = 'running';

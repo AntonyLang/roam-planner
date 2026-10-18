@@ -9,6 +9,8 @@ from . import store
 from .common import Input, envelope, make_app
 from .providers import amap, open_meteo, railway, routing, venues, xhs
 from .providers.errors import UpstreamError
+from .runtime_config import get_effective_config, use_config
+from .internal import router as internal_router
 
 # 来源失败 -> HTTP 状态码（与骨架里 call_http 的约定一致：超时 504）
 STATUS_BY_ERROR = {
@@ -22,6 +24,8 @@ STATUS_BY_ERROR = {
     "UPSTREAM_ERROR": 502,
     "UPSTREAM_INVALID_RESPONSE": 502,
     "XHS_USER_ACTION_REQUIRED": 409,
+    "XHS_SESSION_EXPIRED": 409,
+    "SOURCE_CONFIG_UNAVAILABLE": 503,
 }
 
 app = make_app("external-sources")
@@ -81,7 +85,7 @@ async def record(record_id: str):
 
 
 # ------------------------------------------------------- 实时来源（四个能力）
-async def _serve_real_source(request: Request, call):
+async def _serve_real_source(request: Request, call, uses_sources_config: bool = False):
     """接入真实来源的统一出口。
 
     - 成功（含「无结果」）返回 meta.mock=false，表示结果不来自占位实现
@@ -89,7 +93,12 @@ async def _serve_real_source(request: Request, call):
     - 与「成功但无结果」严格区分：后者是 200 + 空 result + missing
     """
     try:
-        data = await call(request.app.state.http)
+        if uses_sources_config:
+            config = await get_effective_config(request.app.state.http)
+            with use_config(config):
+                data = await call(request.app.state.http)
+        else:
+            data = await call(request.app.state.http)
     except UpstreamError as exc:
         return JSONResponse(
             envelope(error={"code": exc.code, "message": exc.message}, mock=False),
@@ -107,13 +116,13 @@ async def weather_query(request: Request, body: Query):
 @router.post("/places/query")
 async def places_query(request: Request, body: Query):
     """地点查询：高德 Web 服务（坐标 GCJ-02，带缓存）。"""
-    return await _serve_real_source(request, lambda http: amap.query_places(http, body.query))
+    return await _serve_real_source(request, lambda http: amap.query_places(http, body.query), True)
 
 
 @router.post("/routes/query")
 async def routes_query(request: Request, body: Query):
     """城市内路线：配置的高德或Geoapify来源，保留坐标系与估时依据。"""
-    return await _serve_real_source(request, lambda http: routing.query_routes(http, body.query))
+    return await _serve_real_source(request, lambda http: routing.query_routes(http, body.query), True)
 
 
 @router.post("/transport/query")
@@ -124,17 +133,17 @@ async def transport_query(request: Request, body: Query):
 
 @router.post('/venues/query')
 async def venues_query(request: Request, body: VenueInput):
-    return await _serve_real_source(request, lambda http: venues.query_venues(http, body.query))
+    return await _serve_real_source(request, lambda http: venues.query_venues(http, body.query), True)
 
 
 @router.post('/xhs/query')
 async def xhs_search(request: Request, body: XhsSearchInput):
-    return await _serve_real_source(request, lambda http: xhs.query(http,body.query))
+    return await _serve_real_source(request, lambda http: xhs.query(http,body.query), True)
 
 
 @router.post('/xhs_note/query')
 async def xhs_note(request: Request, body: XhsNoteInput):
-    return await _serve_real_source(request, lambda http: xhs.query(http,body.query))
+    return await _serve_real_source(request, lambda http: xhs.query(http,body.query), True)
 
 
 async def _venue_category(request, body, category):
@@ -144,7 +153,7 @@ async def _venue_category(request, body, category):
             raise RequestValidationError([{'loc':('body','query','category'), 'msg':'分类与查询接口不一致', 'type':'value_error'}])
     except ValidationError as error:
         raise RequestValidationError(error.errors()) from error
-    return await _serve_real_source(request, lambda http: venues.query_venues(http, query))
+    return await _serve_real_source(request, lambda http: venues.query_venues(http, query), True)
 
 
 @router.post('/hotels/query')
@@ -160,4 +169,5 @@ async def restaurants_query(request: Request, body: Query):
 app.include_router(router)
 from .mcp import router as mcp_router
 app.include_router(mcp_router)
+app.include_router(internal_router)
 

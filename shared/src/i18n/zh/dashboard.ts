@@ -201,5 +201,8 @@ const dashboard: TranslationStrings = {
   'dashboard.aria.addTimezone': '添加时区',
   'dashboard.aria.removeTimezone': '移除 {city}',
   'dashboard.dayCountRequired': '天数为必填项',
+  'dashboard.services.needsModelTitle': '旅行规划助手尚未配置模型',
+  'dashboard.services.needsModelText': '你仍可管理旅行；开始 AI 规划前，请先配置并检查模型服务。',
+  'dashboard.services.configure': '配置服务',
 };
 export default dashboard;

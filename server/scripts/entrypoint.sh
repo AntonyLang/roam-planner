@@ -22,7 +22,7 @@ fi
 
 # Best effort: a read-only host filesystem or a locked-down bind mount must keep
 # booting, exactly as it did before.
-chown -R node:node /app/data /app/uploads 2>/dev/null || true
+chown -R node:node /app/data /app/uploads /app/service-access 2>/dev/null || true
 
 # cd into server/ so tsconfig-paths/register finds tsconfig.json and
 # ../node_modules resolves correctly.

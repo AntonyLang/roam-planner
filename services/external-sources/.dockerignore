@@ -4,6 +4,8 @@ __pycache__
 .venv
 .env*
 .run
+.playwright-cli
+output
 data
 tests
 *.sqlite*

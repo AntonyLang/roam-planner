@@ -10,6 +10,15 @@ third-party provider. The following upstream data attributions are retained.
 
 # Third-party data & attributions
 
+## Railway MCP service
+
+The default Compose deployment starts the separately distributed
+[drfccv/mcp-server-12306](https://github.com/drfccv/mcp-server-12306)
+container, pinned by image digest. This community MCP adapter is maintained by
+Drfccv and licensed under MIT; its code and image retain their upstream license.
+Roam's Sources service calls it over the internal network and does not claim it
+as an official 12306 service. Query results remain subject to upstream availability.
+
 TREK bundles and uses third-party data that requires attribution.
 
 ## geoBoundaries — country & sub-national boundaries

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, ReactNode, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
+import { useServicesStore } from './store/servicesStore'
 import { applyAppearance } from './theme/applyAppearance'
 import { useAddonStore } from './store/addonStore'
 import { usePluginStore } from './store/pluginStore'
@@ -46,6 +47,7 @@ const TripPlannerPage = lazyWithRetry(() => import('./pages/TripPlannerPage'))
 const FilesPage = lazyWithRetry(() => import('./pages/FilesPage'))
 const AdminPage = lazyWithRetry(() => import('./pages/AdminPage'))
 const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'))
+const ServicesSetupPage = lazyWithRetry(() => import('./pages/ServicesSetupPage'))
 const VacayPage = lazyWithRetry(() => import('./pages/VacayPage'))
 const HelpPage = lazyWithRetry(() => import('./pages/HelpPage'))
 const AtlasPage = lazyWithRetry(() => import('./pages/AtlasPage'))
@@ -86,6 +88,12 @@ function ProtectedRoute({ children, adminRequired = false, addonId }: ProtectedR
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const user = useAuthStore((s) => s.user)
   const isLoading = useAuthStore((s) => s.isLoading)
+  const servicesConfig = useServicesStore((s) => s.config)
+  const servicesUserId = useServicesStore((s) => s.userId)
+  const servicesLoading = useServicesStore((s) => s.isLoading)
+  const servicesLoaded = useServicesStore((s) => s.isLoaded)
+  const servicesLoadError = useServicesStore((s) => s.loadError)
+  const retryServices = useServicesStore((s) => s.load)
   const appRequireMfa = useAuthStore((s) => s.appRequireMfa)
   const loggingOut = useAuthStore((s) => s.loggingOut)
   const addonStore = useAddonStore()
@@ -113,13 +121,45 @@ function ProtectedRoute({ children, adminRequired = false, addonId }: ProtectedR
     return <Navigate to={`/login?redirect=${redirectParam}`} replace />
   }
 
-  if (
+  const mustSetMfa = Boolean(
     appRequireMfa &&
     user &&
-    !user.mfa_enabled &&
-    location.pathname !== '/settings'
-  ) {
+    !user.mfa_enabled
+  )
+
+  if (mustSetMfa && location.pathname !== '/settings') {
     return <Navigate to="/settings?mfa=required" replace />
+  }
+
+  // The setup form is the first page a new account sees. Keep the protected
+  // destination behind this status lookup so a slow response never flashes the
+  // dashboard or a planner route before the setup decision is known.
+  if (user && !(mustSetMfa && location.pathname === '/settings')) {
+    if (servicesUserId !== user.id || servicesLoading || (!servicesLoaded && !servicesLoadError)) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-surface">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-edge border-t-content rounded-full animate-spin" />
+            <p className="text-sm text-content-muted">{t('common.loading')}</p>
+          </div>
+        </div>
+      )
+    }
+    if (servicesLoadError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-surface px-4">
+          <div className="max-w-md rounded-2xl border border-edge bg-surface-card p-6 text-center shadow-sm">
+            <p className="font-semibold text-content">{t('services.loadError')}</p>
+            <button type="button" onClick={() => void retryServices(user.id, true)} className="mt-4 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 dark:bg-white dark:text-slate-950">
+              {t('services.retry')}
+            </button>
+          </div>
+        </div>
+      )
+    }
+    if (servicesConfig && !servicesConfig.setup_complete && location.pathname !== '/services') {
+      return <Navigate to="/services?onboarding=1" replace />
+    }
   }
 
   if (adminRequired && user && user.role !== 'admin') {
@@ -285,8 +325,10 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { loadUser, isAuthenticated, demoMode, setManaged, setDemoMode, setDevMode, setIsPrerelease, setAppVersion, setHasMapsKey, setHasAmapKey, setPlacesProvider, setServerTimezone, setAppRequireMfa, setTripRemindersEnabled, setPlacesPhotosEnabled, setPlacesAutocompleteEnabled, setPlacesDetailsEnabled, setPlacesEnrichEnabled, setPlaceShadowEnabled } = useAuthStore()
+  const { loadUser, isAuthenticated, user, demoMode, setManaged, setDemoMode, setDevMode, setIsPrerelease, setAppVersion, setHasMapsKey, setHasAmapKey, setPlacesProvider, setServerTimezone, setAppRequireMfa, setTripRemindersEnabled, setPlacesPhotosEnabled, setPlacesAutocompleteEnabled, setPlacesDetailsEnabled, setPlacesEnrichEnabled, setPlaceShadowEnabled } = useAuthStore()
   const { loadSettings } = useSettingsStore()
+  const loadServices = useServicesStore(s => s.load)
+  const clearServices = useServicesStore(s => s.clear)
   const { loadAddons } = useAddonStore()
   const { loadPlugins } = usePluginStore()
 
@@ -335,8 +377,11 @@ export default function App() {
       loadSettings()
       loadAddons()
       loadPlugins()
+      if (user) void loadServices(user.id)
+    } else {
+      clearServices()
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, user?.id])
 
   useEffect(() => {
     registerSyncTriggers()
@@ -463,6 +508,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ViewportRoute phone={MSettingsScreen} desktop={SettingsPage} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/services"
+            element={
+              <ProtectedRoute>
+                <ServicesSetupPage />
               </ProtectedRoute>
             }
           />

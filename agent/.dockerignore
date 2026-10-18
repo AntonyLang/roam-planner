@@ -4,3 +4,6 @@ tests
 .env*
 *.sqlite*
 *.log
+.run
+.playwright-cli
+output

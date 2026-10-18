@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router'
-import { LogOut, Moon, Settings2, Shield, Sun, SunMoon } from 'lucide-react'
+import { LogOut, Moon, Settings2, Shield, SlidersHorizontal, Sun, SunMoon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from '../../../i18n'
 import { useAuthStore } from '../../../store/authStore'
@@ -77,6 +77,7 @@ export default function MUserMenu({ open, onClose }: MUserMenuProps): React.Reac
         </div>
       </div>
       <MListRow icon={Settings2} label={t('nav.bottomSettings')} onClick={() => go('/settings')} />
+      <MListRow icon={SlidersHorizontal} label={t('services.shortTitle')} onClick={() => go('/services')} />
       {user?.role === 'admin' && (
         <MListRow icon={Shield} label={t('nav.bottomAdmin')} onClick={() => go('/admin')} />
       )}

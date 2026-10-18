@@ -107,6 +107,20 @@ def _station_matches(requested: Any, name: Any, code: Any) -> bool:
     return normalized in {str(name or '').strip().removesuffix('站').casefold(), str(code or '').casefold()}
 
 
+def _matches_time_window(item: dict, window: dict) -> bool:
+    for field, after, before in (
+        ('start_time', 'departure_after', 'departure_before'),
+        ('arrive_time', 'arrival_after', 'arrival_before'),
+    ):
+        value = item.get(field)
+        lower, upper = window.get(after), window.get(before)
+        if (lower or upper) and not value:
+            return False
+        if lower and value < lower or upper and value > upper:
+            return False
+    return True
+
+
 def _failure_reason(payload: dict[str, Any]) -> str:
     if payload.get("error"):
         reason = str(payload["error"])
@@ -169,11 +183,12 @@ async def query_transport(client: httpx.AsyncClient, query: dict[str, Any]) -> d
     include_price = bool(query.get("include_price"))
     include_transfer = bool(query.get("include_transfer"))
     limit = as_int(query.get("limit"), 1, MAX_ITEMS, DEFAULT_ITEMS)
+    window = {key: query[key] for key in ('departure_after','departure_before','arrival_after','arrival_before') if query.get(key)}
 
     cache_key = json.dumps(
         {
             "f": str(from_station), "t": str(to_station), "d": str(travel_date),
-            "p": include_price, "x": include_transfer, "n": limit,
+            "p": include_price, "x": include_transfer, "n": limit, "window": window,
         },
         ensure_ascii=False, sort_keys=True,
     )
@@ -199,9 +214,10 @@ async def query_transport(client: httpx.AsyncClient, query: dict[str, Any]) -> d
     # can disappear behind the first ten alternatives and a different station is
     # silently presented as its timetable.
     all_items = [_normalize_train(item) for item in (tickets.get("trains") or [])]
-    matching = [item for item in all_items
+    station_pairs = [item for item in all_items
                 if _station_matches(from_station, item['from_station'], item['from_station_code'])
                 and _station_matches(to_station, item['to_station'], item['to_station_code'])]
+    matching = [item for item in station_pairs if _matches_time_window(item, window)]
     items = matching[:limit]
     result: dict[str, Any] = {
         "mode": "train",
@@ -209,8 +225,11 @@ async def query_transport(client: httpx.AsyncClient, query: dict[str, Any]) -> d
         "to": str(to_station),
         "date": str(travel_date),
         "total_count": len(matching),
+        "station_pair_count": len(station_pairs),
         "upstream_count": len(all_items),
-        "excluded_other_station_pairs": len(all_items) - len(matching),
+        "excluded_other_station_pairs": len(all_items) - len(station_pairs),
+        "excluded_outside_time_window": len(station_pairs) - len(matching),
+        "time_window": window,
         "returned": len(items),
         "items": items,
     }
@@ -265,7 +284,7 @@ async def query_transport(client: httpx.AsyncClient, query: dict[str, Any]) -> d
         "freshness": {"kind": "realtime", "cache_ttl_seconds": CACHE_TTL_SECONDS},
         "units": {"duration": "HH:MM", "seats": "余票为「有 / 无 / 张数」字符串"},
         "coordinate_system": None,
-        "missing": [] if matching else ["指定出发站与到达站之间未返回直达车次；未用同城其他车站替代"],
+        "missing": [] if matching else ["指定站对在所选时刻范围内未返回直达车次" if station_pairs else "指定出发站与到达站之间未返回直达车次；未用同城其他车站替代"],
         "unsupported": unsupported,
     }
     _cache.set(cache_key, data, CACHE_TTL_SECONDS)

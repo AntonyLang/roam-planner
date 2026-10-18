@@ -2,7 +2,11 @@
 
 ## 网页可打开，规划服务不可用
 
-先检查 `docker compose --env-file .env.product ps` 和 `logs --tail 100 agent sources`。确认模型 Key、模型 ID、服务地址已填写；兼容服务地址需要能从容器访问。更换配置后重新执行 Compose 启动命令。
+在首页打开“服务配置”，确认模型 Key、模型 ID、服务地址并检查连接。兼容服务地址需要能从容器访问；检查还会验证工具调用支持。页面保存后下次规划生效。仍不可用时检查 `docker compose ps` 和 `docker compose logs --tail 100 agent sources`。
+
+## 小红书扫码失败或过期
+
+先启用并保存来源，再开始扫码。二维码由 Sources 容器里的 Chromium 生成；本人用小红书 App 确认，遇到平台验证需自行处理。只有真实用户接口确认后才显示已登录。浏览器启动失败请检查 Sources 日志和镜像版本；过期时重新扫码，未登录不会阻挡其他来源。
 
 ## 地点或路线查询失败
 

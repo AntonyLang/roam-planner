@@ -166,7 +166,7 @@ function createPlaceIcon(place, orderNumbers, isSelected) {
   // that. The two never want the same corner at the same time.
   let badgeHtml = ratingBadgeHtml((place as { rating_avg?: number | null }).rating_avg)
   if (orderNumbers && orderNumbers.length > 0) {
-    const label = orderNumbers.join(' · ')
+    const label = escapeHtml(orderNumbers.join(' · '))
     badgeHtml = `<span style="
       position:absolute;bottom:-4px;right:-4px;
       min-width:18px;height:${orderNumbers.length > 1 ? 16 : 18}px;border-radius:${orderNumbers.length > 1 ? 8 : 9}px;
@@ -658,7 +658,7 @@ function wireDraggablePin(el: HTMLElement, placeId: number, map: L.Map): () => v
 interface MemoMarkerProps {
   place: any
   isSelected: boolean
-  orderNumbers: number[] | null
+  orderNumbers: (number|string)[] | null
   photoUrl: string | null
   onClickPlace: (id: number) => void
   onHover: (place: any, x: number, y: number) => void

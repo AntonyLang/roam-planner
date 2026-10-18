@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '../../../tests/helpers/render'
 import { expect, it, vi } from 'vitest'
 import { TripAssistant, type useTripAssistant } from './TripAssistant'
 

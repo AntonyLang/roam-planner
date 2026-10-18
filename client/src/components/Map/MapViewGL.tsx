@@ -1,4 +1,5 @@
 import { useAgentDraftGL } from './AgentDraftLayer'
+import { escapeHtml } from '@trek/shared'
 import { useEffect, useRef, useMemo, useState, createElement, useCallback } from 'react'
 import { makeMarkerDraggable, makePoiDraggable, draggedPoiId } from './markerDrag'
 import type { DawarichTrack, RoadtripVia } from '@trek/shared'
@@ -123,7 +124,7 @@ const NO_ROUTE_VIAS: RouteVia[] = []
 /** Stable empty default: a fresh array each render would refire the spur effect. */
 const NO_ACCESS_LINES: { line: [[number, number], [number, number]]; meters: number }[] = []
 const NO_ROUTE_SEGMENTS: RouteSegment[] = []
-const NO_DAY_ORDER: Record<number, number[] | null> = {}
+const NO_DAY_ORDER: Record<number, (number|string)[] | null> = {}
 const NO_RESERVATIONS: Reservation[] = []
 const NO_CONNECTION_IDS: number[] = []
 const NO_POIS: Poi[] = []
@@ -159,7 +160,7 @@ interface Props {
   center?: [number, number]
   zoom?: number
   fitKey?: number | null
-  dayOrderMap?: Record<number, number[] | null>
+  dayOrderMap?: Record<number, (number|string)[] | null>
   leftWidth?: number
   rightWidth?: number
   hasInspector?: boolean
@@ -356,7 +357,7 @@ function applySatellite(map: any, on: boolean): void {
   } catch { /* a style that refuses the layer keeps the plain basemap */ }
 }
 
-function createMarkerElement(place: Place & { category_color?: string; category_icon?: string }, photoUrl: string | null, orderNumbers: number[] | null, selected: boolean): HTMLDivElement {
+function createMarkerElement(place: Place & { category_color?: string; category_icon?: string }, photoUrl: string | null, orderNumbers: (number|string)[] | null, selected: boolean): HTMLDivElement {
   // A stop that interrupts the drive gets its own small disc, decided before the photo
   // branch: the brand logo a fuel search comes back with is exactly what this replaces.
   // No number badge either, for the same reason the rail gives it none.
@@ -389,7 +390,7 @@ function createMarkerElement(place: Place & { category_color?: string; category_
   // day, the rating when it is not.
   let badgeHtml = ratingBadgeHtml((place as { rating_avg?: number | null }).rating_avg)
   if (orderNumbers && orderNumbers.length > 0) {
-    const label = orderNumbers.join(' · ')
+    const label = escapeHtml(orderNumbers.join(' · '))
     badgeHtml = `<span style="
       position:absolute;bottom:-2px;right:-2px;
       min-width:18px;height:${orderNumbers.length > 1 ? 16 : 18}px;border-radius:${orderNumbers.length > 1 ? 8 : 9}px;

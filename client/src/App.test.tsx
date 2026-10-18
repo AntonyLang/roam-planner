@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../tests/helpers/msw/server'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
+import { useServicesStore } from './store/servicesStore'
 import { resetAllStores } from '../tests/helpers/store'
 import { buildUser, buildSettings, buildTrip } from '../tests/helpers/factories'
 import { offlineDb } from './db/offlineDb'
@@ -19,6 +20,7 @@ vi.mock('./pages/TripPlannerPage', () => ({ default: () => <div>TripPlanner</div
 vi.mock('./pages/FilesPage', () => ({ default: () => <div>Files</div> }))
 vi.mock('./pages/AdminPage', () => ({ default: () => <div>Admin</div> }))
 vi.mock('./pages/SettingsPage', () => ({ default: () => <div>Settings</div> }))
+vi.mock('./pages/ServicesSetupPage', () => ({ default: () => <div>Service setup</div> }))
 vi.mock('./pages/VacayPage', () => ({ default: () => <div>Vacay</div> }))
 vi.mock('./pages/AtlasPage', () => ({ default: () => <div>Atlas</div> }))
 vi.mock('./pages/SharedTripPage', () => ({ default: () => <div>SharedTrip</div> }))
@@ -53,6 +55,9 @@ function renderApp(initialPath = '/') {
  * no-op spy so the MSW /api/auth/me response does not overwrite the seeded state.
  */
 function seedAuth(overrides: Record<string, unknown> = {}) {
+  const user = 'user' in overrides
+    ? overrides.user as ReturnType<typeof buildUser> | null
+    : overrides.isAuthenticated ? buildUser() : null
   useAuthStore.setState({
     isLoading: false,
     isAuthenticated: false,
@@ -60,6 +65,21 @@ function seedAuth(overrides: Record<string, unknown> = {}) {
     appRequireMfa: false,
     loadUser: vi.fn().mockResolvedValue(undefined),
     ...overrides,
+    user,
+  })
+  if (user) useServicesStore.setState({
+    userId: user.id,
+    config: {
+      setup_complete: true,
+      needs_setup: false,
+      model: { base_url: 'https://model.example/v1', model_id: 'travel-model', thinking_level: 'medium', api_key_configured: true },
+      maps: { provider: 'amap', amap_key_configured: false, geoapify_key_configured: false },
+      search: { exa_mcp_url: '' },
+      xhs: { enabled: false },
+    },
+    isLoading: false,
+    isLoaded: true,
+    loadError: false,
   })
 }
 
@@ -220,6 +240,38 @@ describe('ProtectedRoute — unauthenticated', () => {
     seedAuth({ isAuthenticated: false })
     renderApp('/trips/42')
     await waitFor(() => expect(screen.getByText('Login')).toBeInTheDocument())
+  })
+})
+
+describe('ProtectedRoute — service setup', () => {
+  it('keeps trip management accessible after setup was skipped with no model key', async () => {
+    seedAuth({ isAuthenticated: true, user: buildUser() })
+    useServicesStore.setState(state => ({ config: { ...state.config!, setup_complete: true, needs_setup: true,
+      model: { ...state.config!.model, api_key_configured: false } } }))
+    renderApp('/dashboard')
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
+    expect(currentPath()).toBe('/dashboard')
+  })
+  it('sends an account that has not completed setup to the configuration flow', async () => {
+    const user = buildUser()
+    seedAuth({ isAuthenticated: true, user })
+    useServicesStore.setState(state => ({
+      ...state,
+      config: {
+        setup_complete: false,
+        needs_setup: true,
+        model: { base_url: '', model_id: '', thinking_level: 'medium', api_key_configured: false },
+        maps: { provider: 'amap', amap_key_configured: false, geoapify_key_configured: false },
+        search: { exa_mcp_url: '' },
+        xhs: { enabled: false },
+      },
+    }))
+
+    renderApp('/dashboard')
+
+    await waitFor(() => expect(currentPath()).toBe('/services?onboarding=1'))
+    expect(await screen.findByText('Service setup')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
   })
 })
 

@@ -17,7 +17,9 @@ class XhsApi:
         headers.update(Xhshow().sign_headers_post(uri=uri,cookies=cookie,payload=body))
         response = await self.client.post('https://edith.xiaohongshu.com'+uri, headers=headers,
             content=json.dumps(body,separators=(',',':'),ensure_ascii=False),timeout=self.timeout)
-        if response.status_code in (401,403,429,461,471):
+        if response.status_code == 401:
+            raise UpstreamError('XHS_SESSION_EXPIRED','小红书登录状态已失效，请重新扫码登录')
+        if response.status_code in (403,429,461,471):
             raise UpstreamError('XHS_USER_ACTION_REQUIRED',f'小红书返回 HTTP {response.status_code}，请检查登录或平台验证')
         response.raise_for_status()
         value=response.json()
@@ -25,6 +27,26 @@ class XhsApi:
         if value.get('success') is not True:
             raise UpstreamError('XHS_USER_ACTION_REQUIRED','小红书查询被拒绝，需检查登录或平台验证（code='+str(value.get('code'))+'）')
         return value.get('data') or {}
+
+    async def self_info(self):
+        from xhshow import Xhshow
+        cookie = self.session['cookie']
+        uri = '/api/sns/web/v1/user/selfinfo'
+        headers = {'Cookie': cookie, 'User-Agent': self.session['user_agent'],
+                   'Origin': 'https://www.xiaohongshu.com', 'Referer': 'https://www.xiaohongshu.com/',
+                   'Accept': 'application/json, text/plain, */*'}
+        headers.update(Xhshow().sign_headers_get(uri=uri, cookies=cookie, params={}))
+        response = await self.client.get('https://edith.xiaohongshu.com' + uri, headers=headers, timeout=self.timeout)
+        if response.status_code == 401:
+            raise UpstreamError('XHS_SESSION_EXPIRED', '小红书登录状态已失效，请重新扫码登录')
+        if response.status_code in (403, 429, 461, 471):
+            raise UpstreamError('XHS_USER_ACTION_REQUIRED', f'小红书登录验证返回 HTTP {response.status_code}')
+        response.raise_for_status()
+        value = response.json()
+        if not isinstance(value, dict) or value.get('success') is not True:
+            raise UpstreamError('XHS_USER_ACTION_REQUIRED', '小红书未确认当前登录状态')
+        data = value.get('data') or {}
+        return data if isinstance(data, dict) else {}
 
     async def get_note_by_keyword(self, keyword, search_id, page, page_size, sort):
         return await self.post('/api/sns/web/v1/search/notes',{

@@ -6,13 +6,15 @@ import pytest
 from app.main import app
 from app.providers import xhs
 from app.providers.errors import UpstreamError
+from app.providers.xhs_session import save_session
+from app.runtime_config import from_request, use_config
 
 def session(tmp_path,monkeypatch):
+    monkeypatch.setenv('XHS_ENABLED','true')
     folder=tmp_path/'session';folder.mkdir()
-    (folder/'session.json').write_text(json.dumps({'cookie':'web_session=private-cookie','user_agent':'fixture-browser'}))
-    (folder/'active-profile.json').write_text('{"directory":"fixture"}')
     monkeypatch.setenv('XHS_SESSION_FILE',str(folder/'session.json'))
     monkeypatch.setenv('XHS_ACCESS_DB',str(tmp_path/'access.sqlite'))
+    save_session('web_session=private-cookie','fixture-browser')
     monkeypatch.setattr(xhs,'_last_call',0)
     monkeypatch.setattr('xhshow.Xhshow',lambda:SimpleNamespace(sign_headers_post=lambda **kwargs:{'x-s':'fixture-signature'}))
 
@@ -43,13 +45,26 @@ def test_search_then_detail_use_direct_api_and_private_access_record(tmp_path,mo
     assert len(calls)==2
 
 def test_missing_login_and_platform_rejection_are_explicit(tmp_path,monkeypatch):
+    monkeypatch.setenv('XHS_ENABLED','true')
     monkeypatch.setenv('XHS_SESSION_FILE',str(tmp_path/'missing.json'))
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(403))) as client:
-            with pytest.raises(UpstreamError,match='尚未导出'):await xhs.query(client,xhs.SearchQuery(keywords='旅行',destination='青岛'))
+            with pytest.raises(UpstreamError,match='尚未完成'):await xhs.query(client,xhs.SearchQuery(keywords='旅行',destination='青岛'))
             session(tmp_path,monkeypatch)
             with pytest.raises(UpstreamError) as error:await xhs.query(client,xhs.SearchQuery(keywords='旅行',destination='青岛'))
             assert error.value.code=='XHS_USER_ACTION_REQUIRED'
+    asyncio.run(run())
+
+def test_central_xhs_disable_blocks_queries_before_any_upstream_call(monkeypatch):
+    config=from_request({'maps':{'provider':'amap','amap_key':'','geoapify_key':''},
+                         'search':{'exa_mcp_url':''},'xhs':{'enabled':False}})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _request: pytest.fail('XHS must stay disabled'))) as client:
+            with use_config(config):
+                with pytest.raises(UpstreamError,match='已停用'):
+                    await xhs.query(client,xhs.SearchQuery(keywords='旅行',destination='青岛'))
+
     asyncio.run(run())
 
 def test_disabled_guides_are_absent_from_mcp_tools_and_resources(monkeypatch):

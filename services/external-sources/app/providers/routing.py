@@ -10,6 +10,7 @@ from .cache import TtlCache
 from .coordinates import gcj02_to_wgs84, point
 from .errors import UpstreamError
 from .support import empty_payload, now_iso, with_cache_meta
+from ..runtime_config import current_config
 
 URL = 'https://api.geoapify.com/v1/routing'
 TTL = int(os.getenv('GEOAPIFY_ROUTES_CACHE_TTL', '21600'))
@@ -24,7 +25,7 @@ def _wgs84(value):
 
 
 async def query_routes(client, query):
-    provider = os.getenv('SOURCES_ROUTES_PROVIDER', 'amap')
+    provider = current_config().maps.provider
     if provider == 'amap':
         return await amap.query_routes(client, query)
     if provider != 'geoapify':
@@ -33,7 +34,7 @@ async def query_routes(client, query):
     mode = query.get('mode', 'walking')
     if mode not in ('walking', 'driving'):
         raise UpstreamError('UNSUPPORTED_MODE', '当前Geoapify路线来源只提供步行和驾车路网估算，不提供公交班次或实时交通')
-    key = os.getenv('GEOAPIFY_API_KEY', '').strip()
+    key = current_config().maps.geoapify_key.strip()
     if not key:
         raise UpstreamError('SOURCE_NOT_CONFIGURED', 'Geoapify路线未配置GEOAPIFY_API_KEY')
     origin, destination = _wgs84(query.get('origin')), _wgs84(query.get('destination'))

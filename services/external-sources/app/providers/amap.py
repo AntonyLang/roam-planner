@@ -28,6 +28,7 @@ from .cache import TtlCache
 from .coordinates import point, wgs84_to_gcj02
 from .errors import UpstreamError
 from .support import as_int, empty_payload, now_iso, text, with_cache_meta as _with_cache_meta
+from ..runtime_config import current_config
 
 API_KEY_ENV = "AMAP_KEY"
 BASE = "https://restapi.amap.com"
@@ -65,7 +66,7 @@ _KEY_CODES = {"10001", "10002", "10005", "10006", "10007", "10008", "10009", "10
 
 
 def api_key() -> str | None:
-    value = (os.getenv('AMAP_API_KEY') or os.getenv(API_KEY_ENV, '')).strip()
+    value = current_config().maps.amap_key.strip()
     return value or None
 
 

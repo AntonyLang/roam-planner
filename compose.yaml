@@ -2,8 +2,11 @@ name: roam-planner
 
 services:
   trek:
-    image: roam-planner-web:local
-    build: .
+    image: antonyaty/roam-planner:${ROAM_VERSION:-0.2.0}
+    build:
+      context: .
+      args:
+        APP_VERSION: ${ROAM_VERSION:-0.2.0}
     ports:
       - "127.0.0.1:${TREK_PORT:-3000}:3000"
     environment:
@@ -16,9 +19,18 @@ services:
       AGENT_API_URL: http://agent:8102
       EXTERNAL_SOURCES_URL: http://sources:8004
       AMAP_API_KEY: ${AMAP_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      AGENT_MODEL: ${AGENT_MODEL:-deepseek-flash}
+      AGENT_THINKING_LEVEL: ${AGENT_THINKING_LEVEL:-high}
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      SOURCES_ROUTES_PROVIDER: ${SOURCES_ROUTES_PROVIDER:-amap}
+      EXA_MCP_URL: ${EXA_MCP_URL:-https://mcp.exa.ai/mcp}
+      ROAM_SERVICE_TOKEN_FILE: /app/service-access/token
     volumes:
       - trek_data:/app/data
       - trek_uploads:/app/uploads
+      - service_access:/app/service-access
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -27,18 +39,24 @@ services:
       retries: 12
 
   agent:
-    image: roam-planner-agent:local
-    build: ./agent
+    image: antonyaty/roam-planner-agent:${ROAM_VERSION:-0.2.0}
+    build:
+      context: ./agent
+      args:
+        APP_VERSION: ${ROAM_VERSION:-0.2.0}
     environment:
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env.product}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       AGENT_PROVIDER: deepseek
       AGENT_MODEL: ${AGENT_MODEL:-deepseek-flash}
       AGENT_THINKING_LEVEL: ${AGENT_THINKING_LEVEL:-high}
       TREK_MCP_URL: http://trek:3000/mcp
       SOURCES_MCP_URL: http://sources:8004/mcp
+      ROAM_SETTINGS_URL: http://trek:3000/api/services/internal/agent
+      ROAM_SERVICE_TOKEN_FILE: /run/roam-service/token
     volumes:
       - agent_data:/data
+      - service_access:/run/roam-service:ro
     depends_on:
       trek:
         condition: service_healthy
@@ -46,8 +64,11 @@ services:
         condition: service_healthy
 
   sources:
-    image: roam-planner-sources:local
-    build: ./services/external-sources
+    image: antonyaty/roam-planner-sources:${ROAM_VERSION:-0.2.0}
+    build:
+      context: ./services/external-sources
+      args:
+        APP_VERSION: ${ROAM_VERSION:-0.2.0}
     environment:
       SOURCES_STORE_PATH: /data/sources.sqlite
       KNOWLEDGE_ARCHIVE_ROOT: /data/archive
@@ -57,9 +78,17 @@ services:
       GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
       SOURCES_ROUTES_PROVIDER: ${SOURCES_ROUTES_PROVIDER:-amap}
       EXA_MCP_URL: ${EXA_MCP_URL:-https://mcp.exa.ai/mcp}
-      RAILWAY_MCP_URL: ${RAILWAY_MCP_URL:-}
+      RAILWAY_MCP_URL: ${RAILWAY_MCP_URL-http://railway:8000/mcp}
+      ROAM_SETTINGS_URL: http://trek:3000/api/services/internal/sources
+      ROAM_SERVICE_TOKEN_FILE: /run/roam-service/token
+      XHS_SESSION_FILE: /data/xhs/session.enc
+      XHS_ACCESS_DB: /data/xhs/access.sqlite
     volumes:
       - sources_data:/data
+      - service_access:/run/roam-service:ro
+    depends_on:
+      railway:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/healthz',timeout=2)"]
       interval: 10s
@@ -68,15 +97,20 @@ services:
       retries: 6
 
   railway:
-    profiles: [railway]
     image: drfccv/mcp-server-12306@sha256:99e0fa47faf2461226dff070b0cceb25c9d9b9181b9b1a49ed3e258b8351c6e2
     platform: linux/amd64
     environment:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 volumes:
   trek_data:
   trek_uploads:
   agent_data:
   sources_data:
+  service_access:

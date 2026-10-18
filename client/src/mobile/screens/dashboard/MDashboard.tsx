@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Archive, ArchiveRestore, ArrowRight, Bell, CalendarDays, CalendarPlus, Copy,
   LayoutGrid, List, MapPin, Pencil, Plus, RefreshCw, Trash2, Users,
+  Sparkles,
 } from 'lucide-react'
 import { useTranslation } from '../../../i18n'
 import MDancingTrek from '../../components/MDancingTrek'
@@ -12,6 +13,7 @@ import {
 import { useAuthStore } from '../../../store/authStore'
 import { useInAppNotificationStore } from '../../../store/inAppNotificationStore'
 import { usePluginStore } from '../../../store/pluginStore'
+import { useServicesStore } from '../../../store/servicesStore'
 import { useTripCardBadges } from '../../../components/Plugins/TripCardBadges'
 import type { TripCardBadge } from '../../../api/client'
 import DemoBanner from '../../../components/Layout/DemoBanner'
@@ -63,6 +65,7 @@ export default function MDashboard(): React.ReactElement {
   } = useDashboard()
 
   const user = useAuthStore(s => s.user)
+  const needsModelSetup = useServicesStore(s => s.config?.needs_setup ?? false)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const unread = useInAppNotificationStore(s => s.unreadCount)
   const fetchUnreadCount = useInAppNotificationStore(s => s.fetchUnreadCount)
@@ -257,6 +260,18 @@ export default function MDashboard(): React.ReactElement {
       {demoMode && <DemoBanner />}
 
       <div className="px-4 pb-[calc(var(--bottom-nav-h,84px)+32px)] pt-[calc(var(--m-safe-top,12px)+82px)]">
+        {needsModelSetup && (
+          <div className="mb-3 rounded-[20px] border border-amber-500/25 bg-[color:var(--m-glass)] p-[14px]" role="status">
+            <div className="flex items-start gap-3">
+              <Sparkles size={17} className="mt-0.5 flex-none text-amber-700 dark:text-amber-300" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.8125rem] font-semibold text-m-ink">{t('dashboard.services.needsModelTitle')}</p>
+                <p className="mt-1 text-[0.75rem] leading-5 text-m-muted">{t('dashboard.services.needsModelText')}</p>
+                <button type="button" onClick={() => navigate('/services')} className="mt-2 rounded-full bg-m-act px-3 py-2 text-[0.75rem] font-semibold text-m-actfg">{t('dashboard.services.configure')}</button>
+              </div>
+            </div>
+          </div>
+        )}
         {loadError && (
           <div role="alert" className="mb-3 flex items-center gap-3 rounded-[20px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] p-[14px]">
             <span className="min-w-0 flex-1 text-[0.8125rem] font-medium text-m-ink">{t('dashboard.loadErrorBanner')}</span>

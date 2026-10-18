@@ -15,6 +15,10 @@ export function loadConfig() {
   const configuredModels: ModelRef[] = process.env.AGENT_MODELS ? JSON.parse(process.env.AGENT_MODELS) : [model];
   return {
     port: Number(process.env.AGENT_PORT ?? 8102), host: process.env.AGENT_HOST ?? '127.0.0.1',
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseUrl: process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com',
+    serviceSettingsUrl: process.env.ROAM_SETTINGS_URL,
+    serviceTokenFile: process.env.ROAM_SERVICE_TOKEN_FILE,
     database: process.env.AGENT_DATABASE ?? path.join(projectRoot, '.run/agent-c/session.sqlite'),
     cwd: process.env.AGENT_WORKSPACE ?? projectRoot,
     skillsDir: path.join(projectRoot, 'agent/skills'), model, configuredModels,
@@ -25,4 +29,6 @@ export function loadConfig() {
     },
   };
 }
-export type Config = ReturnType<typeof loadConfig>;
+export type Config = Omit<ReturnType<typeof loadConfig>, 'apiKey' | 'baseUrl' | 'serviceSettingsUrl' | 'serviceTokenFile'> & {
+  apiKey?: string; baseUrl?: string; serviceSettingsUrl?: string; serviceTokenFile?: string;
+};

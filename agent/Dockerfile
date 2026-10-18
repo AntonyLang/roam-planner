@@ -9,6 +9,10 @@ RUN npm run build && npm prune --omit=dev
 FROM node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
 WORKDIR /app/agent
 ENV NODE_ENV=production AGENT_HOST=0.0.0.0 AGENT_PORT=8102 AGENT_DATABASE=/data/session.sqlite AGENT_WORKSPACE=/workspace
+ARG APP_VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/AntonyLang/roam-planner" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version=${APP_VERSION}
 COPY --from=build --chown=node:node /app/agent/package.json ./
 COPY --from=build --chown=node:node /app/agent/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/agent/dist ./dist

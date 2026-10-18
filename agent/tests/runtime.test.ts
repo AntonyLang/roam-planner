@@ -35,7 +35,7 @@ async function fixture(route: FauxResponseStep, mcpServers = {}) {
   return { runtime: await openRuntime(config, models), config, models, faux };
 }
 test('product API keeps health checks and omits developer management endpoints', async () => {
-  const server = createAgentServer({ mcp: { status: () => ({ connected: true }) } } as any);
+  const server = createAgentServer({ config: {}, mcp: { status: () => ({ connected: true }) } } as any);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;

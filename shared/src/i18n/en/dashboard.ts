@@ -204,5 +204,8 @@ const dashboard: TranslationStrings = {
   'dashboard.aria.addTimezone': 'Add timezone',
   'dashboard.aria.removeTimezone': 'Remove {city}',
   'dashboard.dayCountRequired': 'Number of days is required',
+  'dashboard.services.needsModelTitle': 'The travel assistant needs a model service',
+  'dashboard.services.needsModelText': 'You can still manage trips. Configure and check a model service before starting AI planning.',
+  'dashboard.services.configure': 'Configure services',
 };
 export default dashboard;

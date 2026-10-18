@@ -110,11 +110,11 @@ COPY --chown=node:node --from=client-builder /app/client/public/fonts ./server/p
 # mount point itself, which fails with EACCES when the bind-mounted host dir
 # isn't writable by node. Only paths this layer creates are chowned; anything
 # already in the image arrived node-owned via --chown above.
-RUN mkdir -p /app/data/logs /app/uploads/files /app/uploads/covers /app/uploads/avatars \
+RUN mkdir -p /app/service-access /app/data/logs /app/uploads/files /app/uploads/covers /app/uploads/avatars \
       /app/uploads/photos /app/uploads/journey /app/uploads/places && \
     ln -s /app/uploads /app/server/uploads && \
     ln -s /app/data /app/server/data && \
-    chown -R node:node /app/data /app/uploads && \
+    chown -R node:node /app/data /app/uploads /app/service-access && \
     chown -h node:node /app/server/uploads /app/server/data
 
 ENV NODE_ENV=production
@@ -122,6 +122,9 @@ ENV NODE_USE_ENV_PROXY=1
 ENV PORT=3000
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
+LABEL org.opencontainers.image.source="https://github.com/AntonyLang/roam-planner" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version=${APP_VERSION}
 
 EXPOSE 3000
 
