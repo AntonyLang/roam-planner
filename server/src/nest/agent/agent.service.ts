@@ -9,6 +9,10 @@ import { DayNotesService } from '../day-notes/day-notes.service';
 import { BudgetService } from '../budget/budget.service';
 import { AccommodationsService } from '../accommodations/accommodations.service';
 import { z } from 'zod';
+import { readEnv } from '../../app-config';
+import {plannedTransport} from './planned-transport';
+import {ReservationsService} from '../reservations/reservations.service';
+import type {DayAccommodation} from '../accommodations/accommodations.service';
 
 const nativeOperations = z.array(z.discriminatedUnion('name', [
   z.object({ name: z.literal('create_day_note'), arguments: z.object({ tripId: z.number().int().positive(), dayId: z.number().int().positive(), text: z.string().min(1).max(500), time: z.string().max(250).optional(), icon: z.string().max(64).optional(), color: z.string().max(64).nullable().optional(), sort_order: z.number().optional() }).strict() }),
@@ -33,7 +37,7 @@ export class AgentService implements OnModuleInit {
   constructor(private readonly db: DatabaseService, private readonly places: PlacesService,
     private readonly assignments: AssignmentsService, private readonly permissions: PermissionsService,
     private readonly notes?: DayNotesService, private readonly budget?: BudgetService,
-    private readonly accommodations?: AccommodationsService) {}
+    private readonly accommodations?: AccommodationsService, private readonly reservations?: ReservationsService) {}
 
   onModuleInit(): void {
     // Additive, repeatable domain migration; does not change upstream tables.
@@ -41,6 +45,8 @@ export class AgentService implements OnModuleInit {
       CREATE TABLE IF NOT EXISTS agent_conditions (trip_id INTEGER PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE, content TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS agent_candidates (candidate_id TEXT NOT NULL, version INTEGER NOT NULL, trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE, payload TEXT NOT NULL, adopted_at TEXT, PRIMARY KEY(candidate_id, version));
       CREATE TABLE IF NOT EXISTS agent_operations (operation_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, signature TEXT NOT NULL, result TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS agent_confirmations (trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,user_id INTEGER NOT NULL,key TEXT NOT NULL,PRIMARY KEY(trip_id,user_id,key));
+      CREATE TABLE IF NOT EXISTS agent_map_routes (trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,key TEXT NOT NULL,payload TEXT NOT NULL,queried_at INTEGER NOT NULL,PRIMARY KEY(trip_id,key));
     `);
   }
 
@@ -83,6 +89,32 @@ export class AgentService implements OnModuleInit {
     });
   }
   draftAccess(tripId: number, userId: number) { this.access(tripId, userId, true); }
+  confirmations(tripId:number,userId:number){
+    this.access(tripId,userId);
+    return {keys:this.db.all<{key:string}>('SELECT key FROM agent_confirmations WHERE trip_id=? AND user_id=?',tripId,userId).map(row=>row.key)};
+  }
+  confirm(tripId:number,userId:number,key:string){
+    this.access(tripId,userId);
+    this.db.run('INSERT OR IGNORE INTO agent_confirmations VALUES (?,?,?)',tripId,userId,key);
+    return {confirmed:true};
+  }
+  async mapRoute(tripId: number, userId: number, query: {
+    origin: { latitude: number; longitude: number; coordinate_system: 'WGS84' };
+    destination: { latitude: number; longitude: number; coordinate_system: 'WGS84' };
+    mode: 'walking'|'transit'|'driving';
+  }) {
+    this.access(tripId, userId);
+    const key=hash(query);
+    const cached=this.db.get<{payload:string}>('SELECT payload FROM agent_map_routes WHERE trip_id=? AND key=? AND queried_at>?',tripId,key,Date.now()-86400000);
+    if(cached)return JSON.parse(cached.payload);
+    const response = await fetch(readEnv().agent.externalSourcesUrl.replace(/\/$/,'') + '/api/v1/sources/routes/query', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query }), signal: AbortSignal.timeout(25000),
+    });
+    const body = await response.json() as {data?:{result?:{geometry?:{coordinates?:number[][][]}}};error?:{message:string}};
+    if (!response.ok || body.error) throw new HttpException(body.error?.message ?? '路线查询暂时不可用', 502);
+    if(body.data?.result?.geometry?.coordinates?.length)this.db.run('INSERT INTO agent_map_routes VALUES (?,?,?,?) ON CONFLICT(trip_id,key) DO UPDATE SET payload=excluded.payload,queried_at=excluded.queried_at',tripId,key,JSON.stringify(body.data),Date.now());
+    return body.data;
+  }
 
   conditions(tripId: number, userId: number, requirements: Record<string, unknown>) {
     this.access(tripId, userId, true);
@@ -296,20 +328,38 @@ export class AgentService implements OnModuleInit {
           const { place_ref, ...args } = operation.arguments;
           const place_id = args.place_id ?? (place_ref ? placeRefs.get(place_ref) : undefined);
           if (!place_id) throw new HttpException('Accommodation draft place is missing', 422);
-          const { accommodation } = this.accommodations.createAccommodation(data.trip_id, { ...args, place_id });
+          const existing=this.db.get<DayAccommodation>('SELECT * FROM day_accommodations WHERE trip_id=? AND place_id=? AND start_day_id=? AND end_day_id=?',data.trip_id,place_id,args.start_day_id,args.end_day_id);
+          const { accommodation } = existing?this.accommodations.updateAccommodation(existing.id,existing,{...args,place_id}):this.accommodations.createAccommodation(data.trip_id, { ...args, place_id });
+          if(existing&&args.notes!==undefined)this.db.run("UPDATE reservations SET notes=? WHERE trip_id=? AND accommodation_id=? AND status='pending'",args.notes,data.trip_id,existing.id);
           // Upstream creates confirmed bookings by default. An Agent estimate
           // remains planned until the user records a real booking.
-          this.db.run("UPDATE reservations SET status='pending' WHERE accommodation_id=? AND trip_id=?", (accommodation as { id: number }).id, data.trip_id);
+          if(!existing)this.db.run("UPDATE reservations SET status='pending' WHERE accommodation_id=? AND trip_id=?", (accommodation as { id: number }).id, data.trip_id);
         }
       }
       const at = new Date().toISOString();
+      for(const leg of plannedTransport(plan)){
+        const day=(snapshot.days as {id:number;day_number:number;date:string}[]).find(day=>day.day_number===leg.from.day_number)!;
+        const key=candidateId+':'+leg.from.ref+':'+leg.to.ref;
+        const existing=this.db.get<{id:number;status:string}>('SELECT id,status FROM reservations WHERE trip_id=? AND json_extract(metadata,\'$.agent_transport_key\')=?',data.trip_id,key);
+        const record={title:`${leg.fromName} → ${leg.toName}${leg.code?' · '+leg.code:''}`,type:leg.type,day_id:day.id,
+          reservation_time:leg.departure?`${leg.date??day.date}T${leg.departure}`:undefined,reservation_end_time:leg.arrival?`${leg.date??day.date}T${leg.arrival}`:undefined,
+          status:'pending',needs_review:leg.type==='flight',notes:[leg.from.notes,leg.to.notes].join('\n'),
+          metadata:{agent_transport_key:key,from:leg.fromName,to:leg.toName,...(leg.type==='train'?{train_number:leg.code}:leg.type==='flight'?{flight_number:leg.code,departure_airport:leg.fromName,arrival_airport:leg.toName}:{}),legs:[{from:leg.fromName,to:leg.toName,dep_day_id:day.id,arr_day_id:day.id,dep_time:leg.departure,arr_time:leg.arrival,...(leg.type==='train'?{train_number:leg.code}:{flight_number:leg.code})}]}};
+        if(!existing)this.reservations!.create(data.trip_id,record);
+        else if(existing.status==='pending')this.reservations!.update(existing.id,data.trip_id,record,this.reservations!.getReservation(existing.id,data.trip_id)!);
+      }
       this.db.run('UPDATE agent_candidates SET adopted_at = ? WHERE candidate_id = ? AND version = ?', at, candidateId, version);
+      this.bindAdoptedDraft(candidateId,version,data.trip_id,userId,plan,ids);
       return { candidate_id: candidateId, candidate_version: version, trip_id: data.trip_id, status: 'adopted', adopted_at: at, assignment_ids: ids };
     });
     // Notify only after the complete SQLite transaction commits. Operation
     // replay returns its original receipt without repeating notifications.
     if (!replay && 'assignment_ids' in result && Array.isArray(result.assignment_ids)) {
       const tripId = String(data.trip_id);
+      for(const id of result.assignment_ids){
+        const assignment=this.assignments.getAssignmentWithPlace(id);
+        if(assignment)this.assignments.broadcast(tripId,'place:created',{place:this.places.get(tripId,String(assignment.place_id))!},undefined);
+      }
       for (const placeId of new Set(data.plan.activities.filter(a => a.existing_place_id && a.cost != null).map(a => a.existing_place_id!))) {
         this.assignments.broadcast(tripId, 'place:updated', { place: this.places.get(tripId, String(placeId)) }, undefined);
       }
@@ -327,5 +377,32 @@ export class AgentService implements OnModuleInit {
       this.assignments.reconcile(data.trip_id);
     }
     return result;
+  }
+
+  private bindAdoptedDraft(candidateId:string,version:number,tripId:number,userId:number,plan:AgentSave['plan'],ids:number[]){
+    const rows=this.db.all<{session_id:string;payload:string}>('SELECT session_id,payload FROM agent_drafts WHERE trip_id=? AND user_id=?',tripId,userId);
+    const ordered=plan.scope.segments.flatMap(segment=>plan.activities.filter(activity=>activity.scope_ref===segment.ref));
+    const bindings=new Map(ordered.map((activity,index)=>[activity.ref,ids[index]]));
+    for(const row of rows){
+      const draft=JSON.parse(row.payload);
+      if(draft.version+1!==version||candidateId!=='c:'+row.session_id)continue;
+      const scope=structuredClone(plan.scope);
+      for(const segment of scope.segments){
+        const assigned=ordered.filter(a=>a.scope_ref===segment.ref).map(a=>bindings.get(a.ref)!);
+        segment.replace_assignment_ids=assigned;
+        const before=this.db.all<{id:number}>('SELECT id FROM day_assignments WHERE day_id=? ORDER BY order_index,id',segment.day_id);
+        segment.insert_after_assignment_id=before[before.findIndex(a=>a.id===assigned[0])-1]?.id??null;
+      }
+      draft.activities=draft.activities.map((activity:AgentSave['plan']['activities'][number])=>{
+        const assignment=this.assignments.getAssignmentWithPlace(bindings.get(activity.ref)!);
+        const place=this.places.get(String(tripId),String(assignment!.place_id))!;
+        return {...activity,existing_place_id:place.id,latitude:place.lat,longitude:place.lng,coordinate_system:place.lat==null?null:'WGS84'};
+      });
+      draft.base_revision=this.snapshot(tripId,userId).revision;
+      draft.approved_scope=scope;draft.revision_scope=scope;draft.plan_details.scope=scope;
+      draft.extras={};delete draft.plan_details.extensions?.native_operations;
+      delete draft.plan;draft.validated=false;delete draft.checks;
+      this.db.run('UPDATE agent_drafts SET payload=? WHERE session_id=?',JSON.stringify(draft),row.session_id);
+    }
   }
 }

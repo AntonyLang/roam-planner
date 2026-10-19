@@ -61,7 +61,6 @@ function seedAuth(overrides: Record<string, unknown> = {}) {
   useAuthStore.setState({
     isLoading: false,
     isAuthenticated: false,
-    user: null,
     appRequireMfa: false,
     loadUser: vi.fn().mockResolvedValue(undefined),
     ...overrides,

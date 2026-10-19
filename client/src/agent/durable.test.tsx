@@ -16,6 +16,29 @@ class Events {
 beforeEach(() => { http.get.mockReset(); http.post.mockReset(); Events.opened = []; vi.stubGlobal('EventSource', Events); });
 afterEach(() => vi.unstubAllGlobals());
 
+it('echoes steering input immediately, correlates its queued entry, and retries the same request identity',async()=>{
+  http.get.mockResolvedValue({data:{items:[]}});
+  let finish!:(value:any)=>void;
+  http.post.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}));
+  const {result}=renderHook(()=>useDurableConversation('8'));
+  await waitFor(()=>expect(Events.opened).toHaveLength(1));
+  let sending!:Promise<void>;
+  act(()=>{sending=result.current.send('午后要休息','request-one')});
+  expect(result.current.outbox).toEqual([{requestId:'request-one',text:'午后要休息',status:'sending'}]);
+  await act(async()=>{finish({data:{status:'queued'}});await sending});
+  expect(result.current.outbox[0].status).toBe('queued');
+  act(()=>Events.opened[0].emit('session',{events:[{type:'submission',record:{requestId:'request-one',status:'done',entry:51}},{type:'entry_appended',entry:{id:51,kind:'pi.user',model:[{role:'user',content:'午后要休息'}]}}]}));
+  await waitFor(()=>expect(result.current.outbox).toHaveLength(0));
+  expect(result.current.entries).toHaveLength(1);
+  http.post.mockRejectedValueOnce(new Error('offline'));
+  await act(async()=>{await result.current.send('预算 5000','request-two').catch(()=>{})});
+  expect(result.current.outbox[0]).toMatchObject({text:'预算 5000',status:'failed'});
+  http.post.mockResolvedValueOnce({data:{status:'queued'}});
+  await act(async()=>{await result.current.retryMessage('request-two')});
+  expect(http.post.mock.calls.slice(-2).map(call=>call[1])).toEqual([{message:'预算 5000',request_id:'request-two'},{message:'预算 5000',request_id:'request-two'}]);
+  expect(result.current.outbox).toHaveLength(1);
+});
+
 it('merges paginated history with native snapshots by numeric IDs and applies live updates', async () => {
   http.get.mockImplementation(async (_: string, config: any) => config.params.cursor
     ? { data: { items: [{ id: 12, kind: 'pi.user', model: [{ role: 'user', content: '后续要求' }] }] } }

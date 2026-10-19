@@ -42,7 +42,7 @@ https://github.com/user-attachments/assets/a80b11f5-d4de-48e0-b15b-29f11917f1b0
 
 ### 方式一：Docker Hub 预构建镜像（推荐）
 
-适合直接使用。只需 Docker Engine / Docker Desktop 和 Docker Compose，不需要 Git，也不需要下载完整源码。当前镜像版本为 `0.2.1`，发布平台为 Linux/amd64；Windows 使用 Docker Desktop 的 Linux 容器。
+适合直接使用。只需 Docker Engine / Docker Desktop 和 Docker Compose，不需要 Git，也不需要下载完整源码。当前镜像版本为 `0.2.2`，发布平台为 Linux/amd64；Windows 使用 Docker Desktop 的 Linux 容器。
 
 新建一个部署目录，将 [compose.yaml](https://raw.githubusercontent.com/AntonyLang/roam-planner/main/compose.yaml) 下载到里面。
 

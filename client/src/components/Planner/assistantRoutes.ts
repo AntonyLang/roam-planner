@@ -26,7 +26,7 @@ const near=(a:{lat:number;lng:number}|undefined,b:{lat:number;lng:number}|undefi
 
 export function draftRouteStyle(segment:DraftRouteSegment,formal=false){
   return {color:draftDayColor(segment.dayNumber),weight:segment.schematic?3:5,opacity:formal?.9:.65,
-    dashArray:segment.schematic?(segment.mode==='flight'?'1 9':'12 6 2 6'):formal?undefined:'8 5'}
+    dashArray:segment.schematic?(segment.mode==='flight'?'1 9':['train','transfer'].includes(segment.mode)?'12 6 2 6':'4 5'):formal?undefined:'8 5'}
 }
 
 // A queried route becomes itinerary geometry only when it joins consecutive

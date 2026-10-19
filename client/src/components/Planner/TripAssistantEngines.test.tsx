@@ -18,6 +18,7 @@ beforeEach(()=>{
   candidateRows=[]
   api.get.mockImplementation((path:string)=>path.includes('/candidates')
     ?Promise.resolve({data:{candidates:candidateRows}})
+    :path.includes('/confirmations')?Promise.resolve({data:{keys:[]}})
     :Promise.resolve({data:{version:0,activities:[]}}))
   agent.get.mockImplementation(async(path:string)=>({data:{conversation_id:Number(/trips\/(\d+)/.exec(path)![1])+100}}))
   agent.send.mockResolvedValue(undefined)
@@ -85,7 +86,7 @@ it('uses the fixed trip conversation and sends additions to the main Agent',asyn
   expect(result.current.map.points[0].name).toBe('栈桥')
   await act(async()=>{await result.current.send('修改这版草稿')})
   expect(agent.send).toHaveBeenCalledWith('修改这版草稿')
-  expect(api.post).not.toHaveBeenCalled()
+  expect(api.post.mock.calls.filter(([path])=>path.includes('/adopt'))).toHaveLength(0)
   unmount()
 })
 
@@ -135,7 +136,7 @@ it('restores the adopted state for the exact saved version on reload without off
   await waitFor(()=>expect(screen.getByTestId('adopted')).toHaveTextContent('true'))
   expect(screen.queryByRole('button',{name:'采用到旅程'})).not.toBeInTheDocument()
   expect(screen.getByText('已更新旅程，可以在每日安排和地图中继续编辑。')).toBeInTheDocument()
-  expect(api.post).not.toHaveBeenCalled()
+  expect(api.post.mock.calls.filter(([path])=>path.includes('/adopt'))).toHaveLength(0)
 })
 
 it('restores adopted road geometry from actual records and the current formal graph without a journal event',async()=>{
@@ -193,16 +194,16 @@ it('uses the current candidate version and lets a newer draft return to editable
   view.rerender(<Planner tripId={3}/>)
   await waitFor(()=>expect(screen.getByTestId('adopted')).toHaveTextContent('false'))
   expect(screen.getByRole('button',{name:'采用到旅程'})).toBeInTheDocument()
-  expect(screen.getByText(/候选行程/)).toBeInTheDocument()
+  expect(screen.queryByText(/候选行程/)).not.toBeInTheDocument()
 
   agent.travel={draft:{version:7,activities:next.plan.activities.map((item:any)=>({...item,notes:'我刚编辑的草稿'}))},candidate:next,receipts:[]}
   view.rerender(<Planner tripId={3}/>)
   await waitFor(()=>expect(screen.getByTestId('candidate-id')).toHaveTextContent('none'))
   expect(screen.getByTestId('adopted')).toHaveTextContent('false')
   expect(screen.queryByRole('button',{name:'采用到旅程'})).not.toBeInTheDocument()
-  expect(screen.getAllByText('我刚编辑的草稿')).toHaveLength(2)
-  expect(screen.getByText(/行程草稿/)).toBeInTheDocument()
-  expect(api.post).not.toHaveBeenCalled()
+  expect(screen.queryByText('我刚编辑的草稿')).not.toBeInTheDocument()
+  expect(screen.queryByText(/行程草稿/)).not.toBeInTheDocument()
+  expect(api.post.mock.calls.filter(([path])=>path.includes('/adopt'))).toHaveLength(0)
 })
 
 it('does not let a successful adoption response overwrite a newer candidate version',async()=>{

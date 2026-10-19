@@ -7,11 +7,15 @@ export function AgentRouteLegend({draft,left=16}:{draft:DraftMap;left?:number}){
     {show:segments.some(s=>!s.schematic),label:'路网路线',dash:undefined},
     {show:segments.some(s=>s.mode==='train'),label:'铁路示意',dash:'12 6 2 6'},
     {show:segments.some(s=>s.mode==='flight'),label:'航段示意',dash:'1 9'},
+    {show:segments.some(s=>s.mode==='transfer'),label:'城际转场示意',dash:'12 6 2 6'},
+    {show:segments.some(s=>s.schematic&&!['train','flight','transfer'].includes(s.mode)),label:'直线连线（无路网）',dash:'4 5'},
   ].filter(kind=>kind.show)
-  if(!kinds.length)return null
+  if(!kinds.length&&!draft.routePending&&!draft.routeFailed)return null
   return <div aria-label="地图路线图例" style={{position:'absolute',zIndex:800,top:72,left,maxWidth:'min(440px,calc(100% - 32px))',
     padding:'7px 10px',borderRadius:10,background:'var(--bg-primary)',color:'var(--text-secondary)',boxShadow:'0 1px 7px rgba(0,0,0,.14)',fontSize:12}}>
     <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>{kinds.map(kind=><span key={kind.label} style={{display:'inline-flex',alignItems:'center',gap:5}}><svg width="34" height="8" aria-hidden="true"><path d="M1 4H33" stroke="currentColor" strokeWidth="3" strokeDasharray={kind.dash}/></svg>{kind.label}</span>)}</div>
+    {!!draft.routePending&&<p role="status" style={{margin:"5px 0"}}>正在补齐 {draft.routePending} 段实际路线…</p>}
+    {!!draft.routeFailed&&<p role="status" style={{margin:"5px 0"}}>{draft.routeFailed} 段暂用直线示意</p>}
     <details key={draft.viewKey} style={{marginTop:5}}>
       <summary style={{cursor:'pointer'}}>路线详情 · {segments.length} 段</summary>
       <ol aria-label="当前地图路线" style={{margin:'8px 0 0',paddingLeft:20,maxHeight:'min(38vh,300px)',overflowY:'auto',lineHeight:1.6}}>

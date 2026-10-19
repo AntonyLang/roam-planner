@@ -5,7 +5,9 @@ import { useTripStore } from '../../store/tripStore'
 import { adoptedTransportSegments, plannedRouteSegments, type DraftRouteSegment, type TransportLeg, type RouteStop } from './assistantRoutes'
 import './TripAssistant.css'
 import {agentApi,messageText,useDurableConversation} from '../../agent/durable'
-import SubagentList from './SubagentList'
+import AssistantProgress from './AssistantProgress'
+import AssistantConfirmations from './AssistantConfirmations'
+import {useItineraryRoutes} from './useItineraryRoutes'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -19,7 +21,7 @@ type Event = { seq: number; kind: string; task_id: string; payload: any }
 type Task = { id: string; status: string; pending?: any; error?: any; result?: any; input_revision: number }
 type CandidateRecord = { candidate_id: string; candidate_version: number; adopted_at: string | null; plan?: AgentPlan }
 type CandidateAdoptionState = { tripId: number; candidateId: string; candidateVersion: number; loaded: boolean; record?: CandidateRecord; error?: string }
-export type DraftMap = { points: { ref: string; name: string; lat: number; lng: number; label: string; orderLabel: string; notes: string; dayNumber:number; labelDirection?:'top'|'bottom' }[]; lines: number[][][]; segments?: (DraftRouteSegment & {label:string})[]; formalSegments?: (DraftRouteSegment & {label:string})[]; formalLines?: number[][][]; focus?: string; adopted?: boolean; version: string; viewKey?:string; padding?: {left:number;right:number} }
+export type DraftMap = { points: { ref: string; name: string; lat: number; lng: number; label: string; orderLabel: string; notes: string; dayNumber:number; labelDirection?:'top'|'bottom' }[]; lines: number[][][]; segments?: (DraftRouteSegment & {label:string})[]; formalSegments?: (DraftRouteSegment & {label:string})[]; formalLines?: number[][][]; routePending?:number; routeFailed?:number; focus?: string; adopted?: boolean; version: string; viewKey?:string; padding?: {left:number;right:number} }
 const requestId = () => crypto.randomUUID()
 const point = (a: Activity) => a.latitude == null || a.longitude == null ? null : a.coordinate_system === 'GCJ02' ? gcj02ToWgs84(a.latitude, a.longitude) : { lat: a.latitude, lng: a.longitude }
 const statusText: Record<string, string> = { queued: '准备规划', running: '正在规划，可随时补充要求', stopping: '正在收尾并保存进度', waiting_user: '需要你补充', succeeded: '已回复', stopped:'已停止', failed: '规划暂时中断', budget_stopped: '已到本次预算上限' }
@@ -117,7 +119,7 @@ export function useTripAssistant(tripId: number) {
       setPageDraft(data);return true
     }catch{setError('草稿已发生变化，请读取最新草稿后重试。');return false}
   }
-  const map = useMemo<DraftMap>(() => {
+  const baseMap = useMemo(() => {
     // Native places take over after adoption; keep the verified route geometry.
     const selectedDay=activeTripId===tripId?days.find(d=>d.id===selectedDayId)?.day_number:undefined
     const dayLabel=(dayNumber:number)=> (activeTripId===tripId?days.find(d=>d.day_number===dayNumber)?.date:undefined)??`第${dayNumber}天`
@@ -149,7 +151,7 @@ export function useTripAssistant(tripId: number) {
         label:`${dayLabel(s.dayNumber)} · ${s.fromName} → ${s.toName} · ${modeLabel[s.mode]??s.mode}${s.trainCode?' '+s.trainCode:s.flightCode?' '+s.flightCode:''}${s.durationMinutes?` · 约${s.durationMinutes}分钟`:''}${s.schematic?` · 非实际${s.mode==='flight'?'航路':'轨道'}${s.sourceConfirmed?'':' · 班次信息未核实'}`:''}${s.sourceLabel?' · 来源：'+s.sourceLabel:''}`}))
     const segments=labelSegments(plannedRouteSegments(events,previewIds,adopted?[]:activities,transportLegs))
     const formalStops:RouteStop[]=activeTripId!==tripId?[]:days.flatMap(day=>[...(storedAssignments[String(day.id)]??[])].sort((a,b)=>a.order_index-b.order_index).map(assignment=>{
-      const place=storedPlaces.find(p=>p.id===assignment.place_id)
+      const place=storedPlaces.find(p=>p.id===assignment.place_id)??assignment.place
       return {ref:`assignment:${assignment.id}`,day_number:day.day_number,name:place?.name??'',notes:assignment.notes??'',
         latitude:place?.lat??undefined,longitude:place?.lng??undefined,coordinate_system:'WGS84' as const,
         transport_mode:assignment.incoming_leg_transport_mode??place?.transport_mode??undefined}
@@ -159,21 +161,25 @@ export function useTripAssistant(tripId: number) {
       .filter(s=>!formalTransfers.some(t=>t.fromRef===s.fromRef&&t.toRef===s.toRef)),...formalTransfers])
     const formalLines=formalSegments.flatMap(s=>s.lines)
     const lines = segments.flatMap(s=>s.lines)
-    return { points, lines, segments, formalSegments, formalLines, focus, adopted, viewKey:`${tripId}:${session}:${selectedDay??'all'}`,
+    return { points, lines, segments, formalSegments, formalLines, formalStops, selectedDay, focus, adopted, viewKey:`${tripId}:${session}:${selectedDay??'all'}`,
       version: `${draft?.seq ?? ''}:${candidate?.candidate_version ?? ''}:${adopted}:${selectedDay??'all'}` }
   }, [activities, events, focus, plan, draft, candidate, task?.id, adopted,days,activeTripId,selectedDayId,tripId,session,candidateHistory,storedAssignments,storedPlaces])
+  const extraRoutes=useItineraryRoutes(tripId,adopted||!activities.length?baseMap.formalStops:activities,adopted||!activities.length?baseMap.formalSegments:baseMap.segments,baseMap.selectedDay)
+  const extraSegments=extraRoutes.segments.map(s=>({...s,label:`第 ${s.dayNumber} 天 · ${s.fromName} → ${s.toName} · ${{walking:'步行',driving:'驾车',transit:'公共交通',transfer:'城际转场示意'}[s.mode]??s.mode}${s.durationMinutes?' · 约'+s.durationMinutes+'分钟':''}${s.schematic?' · 非实际运行路线':''} · 来源：${s.sourceLabel}`}))
+  const formal=adopted||!activities.length
+  const map={...baseMap,segments:formal?baseMap.segments:[...baseMap.segments,...extraSegments],formalSegments:formal?[...baseMap.formalSegments,...extraSegments]:baseMap.formalSegments,lines:formal?baseMap.lines:[...baseMap.lines,...extraSegments.flatMap(s=>s.lines)],formalLines:formal?[...baseMap.formalLines,...extraSegments.flatMap(s=>s.lines)]:baseMap.formalLines,routePending:extraRoutes.pending,routeFailed:extraRoutes.failed}
   const adopt = async () => {
     if (!candidate || !adoptionReady || adopted || task?.status !== 'succeeded') return
     const identity={tripId,candidateId:candidate.candidate_id,candidateVersion:candidate.candidate_version}
     setSending(true)
     try {
       const { data } = await apiClient.post(`/agent/candidates/${candidate.candidate_id}/adopt`, { operation_id: requestId(), candidate_version: candidate.candidate_version })
+      if(useTripStore.getState().trip?.id===tripId) await useTripStore.getState().hydrateActiveTrip(tripId)
       const current=candidateIdentityRef.current
       if(current?.tripId===identity.tripId&&current.candidateId===identity.candidateId&&current.candidateVersion===identity.candidateVersion)
         setCandidateAdoption({ ...identity, loaded: true, record: { ...candidate, adopted_at: data.adopted_at } })
       setCandidateHistory(previous=>previous?.tripId===identity.tripId?{...previous,records:previous.records.map(row=>
         row.candidate_id===identity.candidateId&&row.candidate_version===identity.candidateVersion?{...row,adopted_at:data.adopted_at}:row)}:previous)
-      if(useTripStore.getState().trip?.id===tripId) await useTripStore.getState().hydrateActiveTrip(tripId)
     } catch {
       const current=candidateIdentityRef.current
       if(current?.tripId===identity.tripId&&current.candidateId===identity.candidateId&&current.candidateVersion===identity.candidateVersion)
@@ -182,7 +188,7 @@ export function useTripAssistant(tripId: number) {
     finally { setSending(false) }
   }
   const retry=()=>native.resume()
-  return {session,engine:'main' as const,events,task,error:error||candidateAdoption?.error||native.error,sending:sending||sessionLoading,send,edit,
+  return {tripId,session,engine:'main' as const,events,task,error:error||candidateAdoption?.error||native.error,sending:sending||sessionLoading,send,edit,
     activities,accommodations,transportLegs,plan,map,setFocus,adopt,adopted,adoptionReady,candidate,retry,current,native}
 
 }
@@ -192,7 +198,6 @@ export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssis
   const navigate = useNavigate()
   const needsModelSetup = useServicesStore(s => s.config?.needs_setup ?? false)
   const [text, setText] = useState('')
-  const [drag, setDrag] = useState<number | null>(null)
   const body = useRef<HTMLDivElement>(null)
   const followed = useRef(true)
   const [awayFromBottom, setAwayFromBottom] = useState(false)
@@ -201,7 +206,7 @@ export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssis
     if (body.current) body.current.scrollTop = body.current.scrollHeight
     followed.current = true; setAwayFromBottom(false)
   }
-  useEffect(() => { if (followed.current && body.current) body.current.scrollTop = body.current.scrollHeight }, [agent.native.entries.length, agent.native.partial, agent.task?.status])
+  useEffect(() => { if (followed.current && body.current) body.current.scrollTop = body.current.scrollHeight }, [agent.native.entries.length, agent.native.outbox, agent.native.tools, agent.native.partial, agent.task?.status])
   useEffect(() => { setText(''); followed.current = true; setAwayFromBottom(false) }, [agent.session])
   const messages=agent.native.entries.flatMap(entry=>entry.model?.[0]&&['pi.user','pi.assistant'].includes(entry.kind)?
     [{key:entry.id,role:entry.model[0].role,text:messageText(entry.model[0])}].filter(m=>m.text):[])
@@ -212,35 +217,21 @@ export function TripAssistant({ agent }: { agent: ReturnType<typeof useTripAssis
     event.preventDefault()
     if (!canSend) return
     const value = text
-    if (await agent.send(value)) { setText(current => current === value ? '' : current); scrollToLatest(); composer.current?.focus() }
-  }
-  const move = (from: number, to: number) => {
-    const items = [...agent.activities]
-    if (items[from].day_number !== items[to].day_number) return
-    const [item] = items.splice(from, 1); items.splice(to, 0, item); void agent.edit(items)
+    setText(''); scrollToLatest(); composer.current?.focus()
+    if (!await agent.send(value)) setText(current => current || value)
   }
   return <section className="trip-assistant" aria-label="旅程规划助手">
     <div className="assistant-heading"><strong>一起规划这趟旅行</strong><small>地点、路线和安排会同步显示在地图上</small></div>
     <div className="assistant-body" ref={body} onScroll={() => { const el=body.current; if(el) { followed.current=el.scrollHeight-el.scrollTop-el.clientHeight<80; setAwayFromBottom(!followed.current) } }}>
-      {!messages.length && <div className="assistant-empty"><strong>从你的旅行想法开始</strong><p>告诉我目的地、同行人数和偏好。我会结合这趟旅程的日期与已有安排来规划。</p><div className="assistant-starters">{['帮我安排每天的路线，节奏轻松一些','先看看现有安排，有哪些需要调整？'].map(prompt=><button key={prompt} type="button" onClick={()=>{setText(prompt);composer.current?.focus()}}>{prompt}</button>)}</div></div>}
+      {!messages.length && !agent.native.outbox?.length && <div className="assistant-empty"><strong>从你的旅行想法开始</strong><p>告诉我目的地、同行人数和偏好。我会结合这趟旅程的日期与已有安排来规划。</p><div className="assistant-starters">{['帮我安排每天的路线，节奏轻松一些','先看看现有安排，有哪些需要调整？'].map(prompt=><button key={prompt} type="button" onClick={()=>{setText(prompt);composer.current?.focus()}}>{prompt}</button>)}</div></div>}
       {messages.map(m=><div key={m.key} className={`assistant-message ${m.role==='user'?'from-user':'from-assistant'}`}><small className="assistant-speaker">{m.role==='user'?'你':'旅行助手'}</small>{m.role==='user'?<div className="assistant-message-text">{m.text}</div>:<AssistantMarkdown text={m.text}/>}</div>)}
-      {(active||agent.native.children.length>0)&&<details className="assistant-activity" open={active}>
-        <summary>{agent.native.stopState==='stopping'?'正在收尾…':active?'正在研究与规划…':'查看研究过程'}</summary>
-        {agent.native.tools.length>0&&<p>正在查询资料或更新安排 · {agent.native.tools.length} 项</p>}
-        <SubagentList agents={agent.native.children}/>
-      </details>}
+      {(agent.native.outbox??[]).map(message=><div key={message.requestId} className="assistant-message from-user"><small className="assistant-speaker">你</small><div className="assistant-message-text">{message.text}</div><small className="assistant-delivery" role="status">{{sending:'正在发送…',queued:'已送达，等待当前步骤结束',accepted:'已送达，已加入规划',failed:'未发送成功，内容已保留'}[message.status]}{message.status==='failed'&&<button type="button" onClick={()=>void agent.native.retryMessage(message.requestId).catch(()=>{})}>重试发送</button>}</small></div>)}
+      <AssistantProgress entries={agent.native.entries} tools={agent.native.tools} partial={agent.native.partial} children={agent.native.children}
+        active={active||agent.sending||!!agent.native.outbox?.some(message=>message.status!=='failed')} stopping={agent.native.stopState==='stopping'}
+        count={agent.activities.length} onSupplement={value=>{setText(current=>current?current+'\n'+value:value);composer.current?.focus()}}/>
       {partialText&&<div className="assistant-message from-assistant"><small className="assistant-speaker">旅行助手</small><AssistantMarkdown text={partialText}/></div>}
       {agent.task && <div className="assistant-progress" role="status">{statusText[agent.task.status] ?? agent.task.status}</div>}
-      {!!agent.activities.length && !agent.adopted && <details className="assistant-itinerary"><summary>{agent.candidate && agent.task?.status === 'succeeded' ? '候选行程' : '行程草稿'}{!agent.current && !agent.candidate ? ' · 待更新' : ''} · {agent.activities.length} 个安排</summary>
-        <small>点击地点定位；拖动调整同日顺序。需要助手调整时，可在对话中说明。</small>
-        {agent.activities.map((a, i) => <article key={a.ref} draggable={!agent.sending} onDragStart={() => setDrag(i)} onDragOver={e => e.preventDefault()} onDrop={() => { if (drag !== null) move(drag, i); setDrag(null) }}>
-          <button className="assistant-place" onClick={() => agent.setFocus(a.ref)}>第 {a.day_number} 天 · {a.name}</button>
-          <div className="assistant-times"><input aria-label={`${a.name}开始时间`} type="time" defaultValue={a.start_time ?? ''} key={a.ref + a.start_time} onBlur={e => { if (e.target.value && e.target.value !== a.start_time) void agent.edit(agent.activities.map((v, n) => n === i ? { ...v, start_time: e.target.value } : v)) }} /><span>— {a.end_time ?? '待定'}</span><button aria-label={`移除${a.name}`} disabled={agent.sending} onClick={() => agent.edit(agent.activities.filter((_, n) => n !== i))}>移除</button></div>
-          <p>{a.notes}</p>{a.cost != null && <small>预计 {a.cost} {a.currency}</small>}
-        </article>)}
-      </details>}
-      {!!agent.accommodations.length&&!agent.adopted&&<details className="assistant-accommodations"><summary>住宿建议 · {agent.accommodations.length} 处 · 未预订</summary>{agent.accommodations.map((a,i)=><article key={i}><button onClick={()=>a.ref&&agent.setFocus(a.ref)}>{a.name}</button><p>{a.dateRange}</p><p>{a.notes}</p><small>房价与房态待核实</small></article>)}</details>}
-      {agent.plan?.unknowns?.length ? <details><summary>待确认与限制</summary>{agent.plan.unknowns.map((x, i) => <p key={i}>{x}</p>)}</details> : null}
+      <AssistantConfirmations tripId={agent.tripId} stays={agent.accommodations} unknowns={agent.plan?.unknowns??[]} onFocus={agent.setFocus}/>
       {agent.candidate && agent.task?.status === 'succeeded' && agent.adoptionReady && !agent.adopted && <button className="assistant-adopt" disabled={agent.sending} onClick={agent.adopt}>采用到旅程</button>}
       {agent.adopted && <p>已更新旅程，可以在每日安排和地图中继续编辑。</p>}
       {agent.native.stopState==='stopped' && <button onClick={agent.retry}>保留已有结果并继续</button>}

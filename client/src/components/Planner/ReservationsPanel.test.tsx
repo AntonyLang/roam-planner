@@ -61,7 +61,7 @@ describe('ReservationsPanel', () => {
     render(<ReservationsPanel {...defaultProps} reservations={[]} />);
     // The mobile rewrite dropped the hint subtitle in favour of the shared
     // EmptyState mascot; the bookings scene renders the TREK mark svg.
-    expect(document.querySelector('.trek--bookings')).toBeInTheDocument();
+    expect(document.querySelector('[data-scene="bookings"]')).toBeInTheDocument();
   });
 
   it('FE-COMP-RES-005: shows Manual Booking add button', () => {
@@ -586,7 +586,7 @@ describe('ReservationsPanel', () => {
     render(<ReservationsPanel {...defaultProps} reservations={[flight]} />);
     expect(screen.getByText('No places found')).toBeInTheDocument();
     expect(screen.queryByText('Flight out')).not.toBeInTheDocument();
-    expect(document.querySelector('.trek--bookings')).toBeNull();
+    expect(document.querySelector('[data-scene="bookings"]')).toBeNull();
   });
 
   it('FE-PLANNER-RESP-053: corrupt stored filters are ignored instead of crashing the panel', () => {

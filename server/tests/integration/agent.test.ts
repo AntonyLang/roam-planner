@@ -97,6 +97,40 @@ describe('Versioned backend draft operations', () => {
     expect(after.assignments).toEqual(expect.arrayContaining([expect.objectContaining({ id, incoming_leg_transport_mode: 'driving' })]));
   });
 
+  it('continues an adopted draft without requiring the model to opt into replacement and reuses its stay',()=>{
+    const f=adoptedDraft();
+    const before=service.snapshot(f.trip,f.user);
+    const prepared=f.drafts.prepare(prepareDraftSchema.parse({base_revision:before.revision,approved_scope:null,approved_unlocks:[]}),f.ctx);
+    const draft=prepared.structuredContent.draft;
+    expect(draft.extras).toEqual({});
+    expect(draft.plan_details.scope.segments[0].replace_assignment_ids).toEqual(f.adopted.assignment_ids);
+    f.bound.call_id='direct-revision';
+    f.drafts.apply(draftChangesSchema.parse({base_version:draft.version,changes:[
+      {op:'patch_activity',ref:'new-stop',fields:{notes:'下午回酒店休息'}},
+      {op:'upsert_accommodation',ref:'stay',place_ref:'new-stop',start_day_id:f.day,end_day_id:f.day,notes:'三人一间双床房'},
+    ]}),f.ctx);
+    f.bound.call_id='direct-revision-save';
+    const saved=f.drafts.saveCandidate(draft.version+1,f.ctx).structuredContent;
+    const result=service.adopt(saved.candidate_id,saved.candidate_version,'direct-revision-adopt-'+f.trip,f.user);
+    const after=service.snapshot(f.trip,f.user);
+    expect(result.assignment_ids).toEqual(f.adopted.assignment_ids);
+    expect(after.places).toHaveLength(before.places.length);
+    expect(after.assignments).toHaveLength(before.assignments.length);
+    expect(after.related.day_accommodations).toHaveLength(1);
+    expect(after.related.reservations).toHaveLength((before.related.reservations as unknown[]).length);
+    expect(after.related.budget_items).toEqual(before.related.budget_items);
+    expect(after.related.day_accommodations).toEqual([expect.objectContaining({notes:'三人一间双床房'})]);
+    expect(after.related.reservations).toEqual([expect.objectContaining({notes:'三人一间双床房',status:'pending'})]);
+  });
+
+  it('persists confirmation per user and exact card content',()=>{
+    const f=fixture();
+    expect(service.confirmations(f.trip,f.user).keys).toEqual([]);
+    service.confirm(f.trip,f.user,'hotel:two-beds');service.confirm(f.trip,f.user,'hotel:two-beds');
+    expect(service.confirmations(f.trip,f.user).keys).toEqual(['hotel:two-beds']);
+    expect(()=>service.confirm(f.trip,999999,'other')).toThrow();
+  });
+
   it('rejects missing adopted bindings and revision scope changed into an append', () => {
     const f = adoptedDraft();
     f.prepare();
@@ -181,6 +215,11 @@ describe('Versioned backend draft operations', () => {
     expect(saved.plan.extensions.transport_legs).toEqual([leg]);
     expect(f.drafts.get(f.ctx).structuredContent.draft.transport_legs).toEqual([leg]);
     expect(db.prepare('SELECT adopted_at FROM agent_candidates WHERE candidate_id=? AND version=?').get(saved.candidate_id,saved.candidate_version)).toEqual({adopted_at:null});
+    service.adopt(saved.candidate_id,saved.candidate_version,'flight-adopt-'+f.trip,f.user);
+    const transport=db.prepare("SELECT type,status,metadata,reservation_time FROM reservations WHERE trip_id=? AND type='flight'").get(f.trip) as any;
+    expect(transport).toMatchObject({type:'flight',status:'pending',reservation_time:null});
+    expect(JSON.parse(transport.metadata)).toMatchObject({departure_airport:'出发机场',arrival_airport:'到达机场'});
+    expect(JSON.parse(transport.metadata).flight_number).toBeUndefined();
   });
   it('prepare exposes the editable draft and preserves it when continuing without inventing scope', () => {
     const f = draftFixture();

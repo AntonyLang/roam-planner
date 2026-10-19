@@ -424,7 +424,7 @@ describe('TripPlannerPage — plan tab', () => {
     expect(props('map').tileUrl).toBe('https://tiles/{z}/{x}/{y}.png')
     expect(props('map').leftWidth).toBe(320)
     expect(props('map').rightWidth).toBe(0)
-    expect(screen.getByLabelText('规划助手与地点分栏')).toHaveStyle({ gridColumn: '2', gridRow: '1' })
+    expect(screen.getByLabelText('规划助手分栏')).toHaveStyle({ gridColumn: '2', gridRow: '1' })
     expect(screen.getByTestId('map-view').parentElement).toHaveClass('planner-map-region')
     expect(props('map').center).toBeUndefined()
     // Without the day the route toggle belongs to, the map draws every automated
@@ -662,24 +662,11 @@ describe('TripPlannerPage — day plan sidebar wiring', () => {
     expect(hookState.updateRouteForDay).not.toHaveBeenCalled()
   })
 
-  it('FE-PAGE-TPW-023: the places sidebar add/edit/bulk callbacks reach the hook', () => {
+  it('FE-PAGE-TPW-023: the right sidebar contains only the planning assistant', () => {
     renderPage()
-    fireEvent.click(screen.getByRole('tab', { name: '地点' }))
-
-    act(() => { props('places').onAddPlace() })
-    expect(hookState.setShowPlaceForm).toHaveBeenCalledWith(true)
-
-    act(() => { props('places').onEditPlace(place) })
-    expect(hookState.openPlaceEditor).toHaveBeenCalledWith(place)
-
-    act(() => { props('places').onDeletePlace(1) })
-    expect(hookState.handleDeletePlace).toHaveBeenCalledWith(1)
-
-    act(() => { props('places').onBulkDeletePlaces([1, 2]) })
-    expect(hookState.setDeletePlaceIds).toHaveBeenCalledWith([1, 2])
-
-    act(() => { props('places').onBulkChangeCategory([1], 4) })
-    expect(hookState.confirmChangeCategory).toHaveBeenCalledWith([1], 4)
+    expect(screen.getByTestId('trip-assistant')).toBeInTheDocument()
+    expect(screen.queryByTestId('places-sidebar')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '地点' })).not.toBeInTheDocument()
   })
 })
 
@@ -823,7 +810,7 @@ describe('TripPlannerPage — mobile drawers', () => {
     const planBtn = Array.from(document.body.querySelectorAll('button'))
       .find(b => b.textContent === 'trip.mobilePlan')!
     const placesBtn = Array.from(document.body.querySelectorAll('button'))
-      .find(b => b.textContent === '规划助手与地点')!
+      .find(b => b.textContent === '规划助手')!
 
     fireEvent.click(planBtn)
     expect(hookState.setMobileSidebarOpen).toHaveBeenCalledWith('left')
@@ -882,26 +869,11 @@ describe('TripPlannerPage — mobile drawers', () => {
     expect((hookState.setMobileSidebarOpen as ReturnType<typeof vi.fn>).mock.calls.length).toBe(closes + 1)
   })
 
-  it('FE-PAGE-TPW-032: the right drawer renders the places list and its mobile-only callbacks', () => {
+  it('FE-PAGE-TPW-032: the right drawer contains the assistant without a places tab', () => {
     renderPage({ mobileSidebarOpen: 'right' })
-    fireEvent.click(screen.getByRole('tab', { name: '地点' }))
-
-    expect(screen.getAllByTestId('places-sidebar')).toHaveLength(2)
-    expect(screen.getByText('规划助手与地点')).toBeInTheDocument()
-
-    act(() => { props('places').onPlaceClick(1) })
-    expect(hookState.handlePlaceClick).toHaveBeenCalledWith(1)
-
-    act(() => { props('places').onAddPlace() })
-    act(() => { props('places').onEditPlace(place) })
-    act(() => { props('places').onDeletePlace(1) })
-    act(() => { props('places').onBulkDeletePlaces([1]) })
-    act(() => { props('places').onBulkDeleteConfirm([1]) })
-    act(() => { props('places').onBulkChangeCategory([1], null) })
-    act(() => { props('places').onScrollTopChange(40) })
-
-    expect(hookState.confirmDeletePlaces).toHaveBeenCalledWith([1])
-    expect((hookState.mobilePlacesScrollTopRef as { current: number }).current).toBe(40)
+    expect(screen.getAllByTestId('trip-assistant')).toHaveLength(2)
+    expect(screen.queryByTestId('places-sidebar')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '地点' })).not.toBeInTheDocument()
   })
 
   it('FE-PAGE-TPW-033: an open drawer hides the floating map buttons', () => {

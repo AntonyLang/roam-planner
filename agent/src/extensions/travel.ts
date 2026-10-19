@@ -42,7 +42,7 @@ export async function invokeTravelMcp(server:string,remote:McpTool,args:Record<s
               isError: result.isError, details: jsonValue({ server, remoteName: remote.name, original, events: events ?? [] }) };
 }
 
-export const TREK_DELIVERY_INSTRUCTIONS = '旅程、旅行资金预算、草稿和采用由 TREK 管理。通过 TREK 草稿工具保存安排，交付候选使用 save_trip_draft_candidate，由用户在页面正式采用。';
+export const TREK_DELIVERY_INSTRUCTIONS = '旅程、旅行资金预算、草稿和采用由 TREK 管理。通过 TREK 草稿工具保存安排，交付候选使用 save_trip_draft_candidate，由用户在页面正式采用。每日行程已在左侧日程表和地图展示，住宿建议与待确认事项由页面卡片展示；聊天只简要说明本次调整、原因和需要用户回答的问题，不再重复完整行程表或候选行程列表，不向用户展示候选ID、版本号或工具调用细节。研究耗时较长时，在阶段结果明确后简短更新进展，并持续把已核实的活动写入草稿。';
 
 export function createTrekDeliveryExtension() {
   return defineExtension({ name: 'trek-delivery',

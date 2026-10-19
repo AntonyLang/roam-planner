@@ -1,3 +1,4 @@
+import CompleteReservationButton from './CompleteReservationButton'
 import { useState, useMemo, useEffect, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
@@ -257,6 +258,7 @@ function ReservationCard({ r, tripId, onEdit, onDelete, files = [], onNavigateTo
             fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600, marginRight: 6,
             maxWidth: 140, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{r.title}</span>
+          {canEdit && <CompleteReservationButton tripId={tripId} reservation={r}/>}
           {canEdit && (
             <button type="button" onClick={() => onEdit(r)} title={t('common.edit')} className="bg-transparent text-content-faint" style={{
               appearance: 'none', border: 'none',
@@ -640,6 +642,7 @@ function TransitJourneyCard({ r, days, onOpen, onDelete, canEdit, tripId, contri
             ]} />
           </div>
         </div>
+        {canEdit && <CompleteReservationButton tripId={tripId} reservation={r}/>}
         {canEdit && (
           <button type="button"
             onClick={e => { e.stopPropagation(); setConfirmOpen(true) }}

@@ -5,6 +5,7 @@ export const agentApi = axios.create({ baseURL: '/agent-api', timeout: 15000 });
 export type NativeMessage = { role: string; content: string | any[]; [key: string]: any };
 export type NativeEntry = { id: number; kind: string; model?: NativeMessage[]; data?: any; byTaskId?: number };
 export type ChildAgent = { name: string; conversationId: number; task: string; status: string; report: string; summary: string; summaryComplete: boolean };
+export type PendingMessage = { requestId: string; text: string; status: 'sending' | 'queued' | 'accepted' | 'failed'; entryId?: number };
 export const messageText = (message?: NativeMessage) => typeof message?.content === 'string' ? message.content :
   (message?.content ?? []).filter((part: any) => part.type === 'text').map((part: any) => part.text).join('');
 
@@ -24,8 +25,16 @@ export function useDurableConversation(id?: string, base = '/agent-api') {
   const [agentConfig, setAgentConfig] = useState<{ model?: { provider: string; modelId: string }; thinkingLevel?: string }>();
   const [travel, setTravel] = useState<any>();
   const [error, setError] = useState('');
+  const [outbox, setOutbox] = useState<PendingMessage[]>([]);
   useEffect(() => {
-    setEntries([]); setPartial(undefined); setTools([]); setChildren([]); setTravel(undefined); setAgentConfig(undefined); setStopState('running'); setRunning(false); setError('');
+    const ids = new Set(entries.map(entry => entry.id));
+    setOutbox(prior => {
+      const remaining = prior.filter(message => message.entryId == null || !ids.has(message.entryId));
+      return remaining.length === prior.length ? prior : remaining;
+    });
+  }, [entries, outbox]);
+  useEffect(() => {
+    setEntries([]); setPartial(undefined); setTools([]); setChildren([]); setTravel(undefined); setAgentConfig(undefined); setStopState('running'); setRunning(false); setError(''); setOutbox([]);
     if (!id) return;
     const abort = new AbortController();
     const loadHistory = async () => {
@@ -68,6 +77,8 @@ export function useDurableConversation(id?: string, base = '/agent-api') {
         });
         else if (item.type === 'tool_execution_start') setTools(prior => [...prior, { callId: item.toolCallId, name: item.toolName, arguments: item.args, status: 'running' }]);
         else if (item.type === 'tool_execution_end') setTools(prior => prior.filter(tool => tool.callId !== item.toolCallId));
+        else if (item.type === 'submission') setOutbox(prior => prior.map(message => message.requestId === item.record.requestId
+          ? { ...message, entryId: item.record.entry, status: item.record.status === 'queued' ? 'queued' : 'accepted' } : message));
         else if (item.type === 'task_failed') setError(item.message);
         else if (item.type === 'agent_changed') setAgentConfig(item.agent);
       }
@@ -81,10 +92,22 @@ export function useDurableConversation(id?: string, base = '/agent-api') {
     events.onerror = () => setError('会话连接已断开，正在重新连接；后台工作继续。');
     return () => { abort.abort(); events.close(); };
   }, [id, base]);
-  const send = async (message: string) => {
-    await axios.post(`${base}/v1/conversations/${id}/messages`, { message, request_id: crypto.randomUUID() });
+  const send = async (message: string, requestId: string = crypto.randomUUID()) => {
+    setOutbox(prior => [...prior.filter(item => item.requestId !== requestId), { requestId, text: message, status: 'sending' }]);
+    try {
+      const { data } = await axios.post(`${base}/v1/conversations/${id}/messages`, { message, request_id: requestId });
+      setOutbox(prior => prior.map(item => item.requestId === requestId
+        ? { ...item, entryId: data.entry ?? item.entryId, status: data.status === 'queued' ? 'queued' : 'accepted' } : item));
+    } catch (error) {
+      setOutbox(prior => prior.map(item => item.requestId === requestId ? { ...item, status: 'failed' } : item));
+      throw error;
+    }
+  };
+  const retryMessage = (requestId: string) => {
+    const message = outbox.find(item => item.requestId === requestId)!;
+    return send(message.text, requestId);
   };
   const stop = async () => { try { await axios.post(`${base}/v1/conversations/${id}/stop`); } catch { setError('停止命令未送达，请重试。'); } };
   const resume = async () => { try { await axios.post(`${base}/v1/conversations/${id}/continue`, { request_id: crypto.randomUUID() }); } catch { setError('继续命令未送达，请重试。'); } };
-  return { entries, partial, running, tools, children, stopState, agentConfig, travel, error, send, stop, resume };
+  return { entries, partial, running, tools, children, stopState, agentConfig, travel, error, outbox, send, retryMessage, stop, resume };
 }

@@ -9,7 +9,7 @@ docker compose pull
 docker compose up -d --wait --no-build
 ```
 
-打开 `http://localhost:3000`，按首次引导配置服务。默认版本 `0.2.1`，当前发布平台为 Linux amd64。镜像在 `antonyaty/roam-planner`、`antonyaty/roam-planner-agent`、`antonyaty/roam-planner-sources`；Sources 已包含扫码所需 Chromium，无需在宿主机安装浏览器。
+打开 `http://localhost:3000`，按首次引导配置服务。默认版本 `0.2.2`，当前发布平台为 Linux amd64。镜像在 `antonyaty/roam-planner`、`antonyaty/roam-planner-agent`、`antonyaty/roam-planner-sources`；Sources 已包含扫码所需 Chromium，无需在宿主机安装浏览器。
 
 四个服务分别是网页与旅程后端 `trek`、规划运行时 `agent`、外部来源 `sources`、铁路查询 MCP `railway`。铁路镜像使用固定摘要的第三方 `drfccv/mcp-server-12306`，默认启动，无需额外 Key；Sources 等待它健康后启动。只有网页端口映射到宿主机，默认 `127.0.0.1:3000`。规划时需要访问所用模型、地图与来源服务。
 

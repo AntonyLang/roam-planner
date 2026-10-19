@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '../../../tests/helpers/render'
-import { expect, it, vi } from 'vitest'
+import { expect, it, vi, beforeEach } from 'vitest'
+import {http,HttpResponse} from 'msw'
+import {server} from '../../../tests/helpers/msw/server'
+beforeEach(()=>server.use(http.get('/api/agent/trips/:id/confirmations',()=>HttpResponse.json({keys:[]}))))
 import { TripAssistant, type useTripAssistant } from './TripAssistant'
 
 function fixture() {
   return {
-    session: '7', activities: [], accommodations: [], adopted: false, sending: false,
+    tripId: 7, session: '7', activities: [], accommodations: [], adopted: false, sending: false,
     send: vi.fn().mockResolvedValue(true),
     native: { entries: [], tools: [], children: [], stopState: 'running', running: false, stop: vi.fn() },
   } as unknown as ReturnType<typeof useTripAssistant>

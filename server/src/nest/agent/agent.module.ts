@@ -12,5 +12,6 @@ import { AgentDrafts } from './agent-drafts.service';
 import { DayNotesModule } from '../day-notes/day-notes.module';
 import { BudgetModule } from '../budget/budget.module';
 import { AccommodationsDomainModule } from '../accommodations/accommodations-domain.module';
-@Module({ imports: [DatabaseModule, PlacesModule, AssignmentsDomainModule, PermissionsModule, DayNotesModule, BudgetModule, AccommodationsDomainModule], controllers: [AgentController, NativeAgentController], providers: [AgentService, AgentDrafts, AgentMcp, AgentJournal] })
+import {ReservationsModule} from '../reservations/reservations.module';
+@Module({ imports: [DatabaseModule, PlacesModule, AssignmentsDomainModule, PermissionsModule, DayNotesModule, BudgetModule, AccommodationsDomainModule,ReservationsModule], controllers: [AgentController, NativeAgentController], providers: [AgentService, AgentDrafts, AgentMcp, AgentJournal] })
 export class AgentModule {}

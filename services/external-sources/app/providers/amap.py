@@ -355,8 +355,11 @@ async def query_routes(client: httpx.AsyncClient, query: dict[str, Any]) -> dict
 
     params: dict[str, Any] = {"origin": origin, "destination": destination}
     if mode == "transit":
-        params["city"] = city or "全国"
-        params["cityd"] = city or "全国"
+        if not city:
+            address = await _amap_get(client, 'https://restapi.amap.com/v3/geocode/regeo', {'location': origin}, key)
+            city = address['regeocode']['addressComponent']['citycode']
+        params["city"] = city
+        params["cityd"] = city
     elif mode == "driving":
         params["extensions"] = "base"
 

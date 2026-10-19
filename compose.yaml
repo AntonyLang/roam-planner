@@ -2,11 +2,11 @@ name: roam-planner
 
 services:
   trek:
-    image: antonyaty/roam-planner:${ROAM_VERSION:-0.2.1}
+    image: antonyaty/roam-planner:${ROAM_VERSION:-0.2.2}
     build:
       context: .
       args:
-        APP_VERSION: ${ROAM_VERSION:-0.2.1}
+        APP_VERSION: ${ROAM_VERSION:-0.2.2}
     ports:
       - "127.0.0.1:${TREK_PORT:-3000}:3000"
     environment:
@@ -39,11 +39,11 @@ services:
       retries: 12
 
   agent:
-    image: antonyaty/roam-planner-agent:${ROAM_VERSION:-0.2.1}
+    image: antonyaty/roam-planner-agent:${ROAM_VERSION:-0.2.2}
     build:
       context: ./agent
       args:
-        APP_VERSION: ${ROAM_VERSION:-0.2.1}
+        APP_VERSION: ${ROAM_VERSION:-0.2.2}
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
@@ -64,11 +64,11 @@ services:
         condition: service_healthy
 
   sources:
-    image: antonyaty/roam-planner-sources:${ROAM_VERSION:-0.2.1}
+    image: antonyaty/roam-planner-sources:${ROAM_VERSION:-0.2.2}
     build:
       context: ./services/external-sources
       args:
-        APP_VERSION: ${ROAM_VERSION:-0.2.1}
+        APP_VERSION: ${ROAM_VERSION:-0.2.2}
     environment:
       SOURCES_STORE_PATH: /data/sources.sqlite
       KNOWLEDGE_ARCHIVE_ROOT: /data/archive
