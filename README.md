@@ -8,9 +8,9 @@ Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话�
 
 60 秒看懂对话规划、地图与日程联动，以及多轮修改。1920 × 1080 · 30fps，配乐与音效，静音也能看懂。
 
-https://github.com/user-attachments/assets/aa6090c2-638f-42dc-8973-5588c004079a
+https://github.com/user-attachments/assets/fe9960e9-6c1e-42de-8961-ab0c81397d4b
 
-[▶ 单独播放产品篇](https://github.com/user-attachments/assets/aa6090c2-638f-42dc-8973-5588c004079a) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-product-landscape.mp4)
+[▶ 单独播放产品篇](https://github.com/user-attachments/assets/fe9960e9-6c1e-42de-8961-ab0c81397d4b) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-product-landscape.mp4)
 
 ## 产品能力
 
