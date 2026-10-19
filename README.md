@@ -8,9 +8,9 @@ Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话�
 
 60 秒看懂对话规划、地图与日程联动，以及多轮修改。1920 × 1080 · 30fps，配乐与音效，静音也能看懂。
 
-[![播放 Roam Planner 产品篇：你的想法，落在每天的地图上](docs/media/roam-product-landscape.jpg)](docs/media/roam-product-landscape.mp4)
+https://github.com/user-attachments/assets/aa6090c2-638f-42dc-8973-5588c004079a
 
-[▶ 观看产品篇](docs/media/roam-product-landscape.mp4) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-product-landscape.mp4)
+[▶ 单独播放产品篇](https://github.com/user-attachments/assets/aa6090c2-638f-42dc-8973-5588c004079a) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-product-landscape.mp4)
 
 ## 产品能力
 
@@ -32,9 +32,9 @@ Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话�
 
 2 分 30 秒讲解 RAG 检索研究、主子 Agent 协作、持久会话、MCP 联动与评测迭代。1920 × 1080 · 30fps，中文旁白、字幕与动态架构图；片中区分产品默认能力与研发实验。
 
-[![播放 Roam Planner 面试技术片：从既有底座，到工程连接](docs/media/roam-technical-architecture.jpg)](docs/media/roam-technical-architecture.mp4)
+https://github.com/user-attachments/assets/a80b11f5-d4de-48e0-b15b-29f11917f1b0
 
-[▶ 观看面试技术片](docs/media/roam-technical-architecture.mp4) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-technical-architecture.mp4)
+[▶ 单独播放面试技术片](https://github.com/user-attachments/assets/a80b11f5-d4de-48e0-b15b-29f11917f1b0) · [下载 MP4](https://github.com/AntonyLang/roam-planner/raw/refs/heads/main/docs/media/roam-technical-architecture.mp4)
 
 ## 快速开始
 
