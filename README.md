@@ -4,6 +4,17 @@
 
 Roam Planner 是一套可自行部署的旅行规划助手：通过多轮对话确认偏好与限制，把地点、时间、交通和费用放到同一张行程地图上。
 
+## 使用版本
+
+| 版本 | 适用方式 | 入口 |
+|---|---|---|
+| 独立部署版（本仓库） | 通过 Docker 运行旅行工作台，管理日程、预算、预订、文件与协作 | [快速开始](#快速开始) |
+| DSH 插件版 | 已有 DeepSeek Harness 环境，在宿主对话中规划旅行，并联动日程与地图 | [插件仓库](https://github.com/AntonyLang/dsh-roam-planner) · [npm](https://www.npmjs.com/package/dsh-roam-planner) |
+
+DSH 插件版为独立重写，聚焦对话规划、日程地图、草稿修订与采用；原工作台的预算、预订、文件与协作页面暂未覆盖。安装与宿主要求见[插件说明](https://github.com/AntonyLang/dsh-roam-planner#readme)，安装后需重启 DSH；铁路和小红书通过可选 MCP 服务接入。
+
+[阅读迁移过程与取舍](https://lingulang.com/articles/roam-planner-to-dsh-plugin)
+
 ## 产品篇
 
 60 秒看懂对话规划、地图与日程联动，以及多轮修改。1920 × 1080 · 30fps，配乐与音效，静音也能看懂。
